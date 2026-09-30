@@ -100,7 +100,8 @@ def main() -> None:
     (HERE / "card-turn2.md").write_text(scrub((repo / ".schema-guard" / "card.md").read_text(), work))
     (HERE / "verdict.json").write_text(scrub((repo / ".schema-guard" / "verdict.json").read_text(), work))
 
-    subprocess.run(["git", "add", "-A", "--", ".", ":(exclude).schema-guard"], cwd=repo, check=True)
+    subprocess.run(["git", "add", "-A", "--", ".", ":(exclude).schema-guard", ":(exclude)**/__pycache__/**"],
+                   cwd=repo, check=True)
     diff = subprocess.run(["git", "diff", "--cached"], cwd=repo, capture_output=True, text=True).stdout
     (HERE / "changes.diff").write_text(scrub(diff, work))
 
