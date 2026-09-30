@@ -9,6 +9,7 @@ which forces the throwaway database URL and refuses to connect anywhere else.
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -74,7 +75,8 @@ class AlembicAdapter(MigrationAdapter):
 
     def _run(self, args: list[str], database_url: str) -> str:
         cmd = [*self.python, str(RUNNER), database_url, "-c", "alembic.ini", *args]
-        proc = subprocess.run(cmd, cwd=self.service_root, capture_output=True, text=True)
+        env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}  # leave no __pycache__ in the service
+        proc = subprocess.run(cmd, cwd=self.service_root, env=env, capture_output=True, text=True)
         if proc.returncode != 0:
             raise RuntimeError(
                 f"alembic {' '.join(args)} failed (exit {proc.returncode}) in "

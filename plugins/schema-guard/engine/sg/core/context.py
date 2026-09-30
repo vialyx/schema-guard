@@ -8,6 +8,7 @@ from pathlib import Path
 
 from sg.core import git, registry
 from sg.core.models import CheckResult, Context, Finding, Status
+from sg.core.discover import discover_services
 from sg.core.policy import POLICY_FILE, Policy, find_repo_root
 from sg.core.pyenv import service_python
 
@@ -27,9 +28,11 @@ def load_policy(repo_root: Path, base_ref: str | None) -> tuple[Policy, str, boo
     policy_file = repo_root / POLICY_FILE
     base_text = git.file_at_ref(repo_root, ref, policy_file) if git.ref_exists(repo_root, ref) else None
     if base_text is None:  # first adoption, or no base ref: nothing older to hold the change to
-        return working, ref, False
-    current = policy_file.read_text() if policy_file.exists() else ""
-    return Policy.load(repo_root, base_text, f"{ref}:{POLICY_FILE}"), ref, base_text != current
+        policy, changed = working, False
+    else:
+        current = policy_file.read_text() if policy_file.exists() else ""
+        policy, changed = Policy.load(repo_root, base_text, f"{ref}:{POLICY_FILE}"), base_text != current
+    return policy.with_services(discover_services(repo_root) if not policy.raw.get("services") else []), ref, changed
 
 
 def build_context(path: Path, base_ref: str | None = None) -> Context:
@@ -38,8 +41,11 @@ def build_context(path: Path, base_ref: str | None = None) -> Context:
     svc = policy.service_for(repo_root, path if path != repo_root else repo_root / policy.services[0].path)
     service_root = (repo_root / svc.path).resolve()
 
-    adapter = registry.detect_adapter(service_root, svc.adapter)
+    preferred = "raw_sql" if svc.migrations_dir and svc.adapter == "auto" else svc.adapter
+    adapter = registry.detect_adapter(service_root, preferred)
     adapter.python = service_python(service_root, repo_root, svc.python)
+    if svc.migrations_dir:
+        adapter.migrations_dir = svc.migrations_dir
     dialect_cls = registry.dialects()[policy.dialect]
     dialect = dialect_cls()
 
@@ -75,6 +81,8 @@ def preflight(ctx: Context) -> list[CheckResult]:
             "go undetected. CI: actions/checkout with fetch-depth: 0. Locally: git fetch origin "
             f"{ctx.base_ref.removeprefix('origin/')}, or pass --base.",
         ))
+    for note in ctx.policy.notes:
+        out.append(CheckResult("policy-locked", Status.WARN, note))
     if ctx.policy_changed:
         out.append(CheckResult("policy-file", Status.ASK, "schema-guard.yaml changed; checks used the base branch's policy", [
             Finding("policy-changed", Status.ASK,

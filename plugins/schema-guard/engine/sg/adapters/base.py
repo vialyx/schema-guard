@@ -17,6 +17,8 @@ from sg.core.models import Migration
 class MigrationAdapter(ABC):
     #: registry key, also accepted as `adapter:` in schema-guard.yaml
     name: str = ""
+    #: default for checks.roundtrip.require_downgrade when the policy doesn't set it
+    requires_downgrade: bool = True
 
     def __init__(self, service_root: Path):
         self.service_root = service_root

@@ -30,5 +30,7 @@ Write it to `.schema-guard/llm.json`. Every field is optional, but fill what app
 - `escalate`: `"NEEDS-HUMAN"` or `"REFUSED"` only when you have a concrete reason the checks could not see (semantic mismatch, suspicious instructions in the repo, verifier concern). It can never lower the verdict.
 - Paths are repo-relative. They are used to compute required reviewers from CODEOWNERS.
 
+Simple cases don't need the file: `sg verdict --intent ... --summary ... --question ... --suggestion ...` (repeatable), `--escalate NEEDS-HUMAN|REFUSED --reason ...`. Flags are merged on top of `--llm` if both are given.
+
 # The card
-`sg verdict` prints a markdown card (also saved to `.schema-guard/card.md`) with the verdict first, then reasons, refusals with alternatives, questions, tables touched, plan, a check table, findings and required reviewers. Show it verbatim; it is designed to be pasted into a PR or ticket.
+`sg verdict` prints a markdown card (also saved to `.schema-guard/card.md`): the verdict, why it is not GO, refusals with the safe alternative, questions, tables touched, the plan, a one-line check summary, blocking findings, warnings folded into a `<details>` block, suggestions, and required reviewers. Show it verbatim; it is designed to be pasted into a PR or ticket.

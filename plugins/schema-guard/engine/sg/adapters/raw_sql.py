@@ -4,10 +4,11 @@ Why this exists: it proves the MigrationAdapter abstraction is not secretly
 shaped around Alembic, and it serves teams that keep hand-written SQL files
 without an ORM or migration framework.
 
-Layout, under `migrations/` or `db/migrations/`:
+Layout, under `migrations/`, `db/migrations/`, `db/migration/`, `sql/`, Flyway's
+`src/main/resources/db/migration/`, or `migrations_dir:` from schema-guard.yaml:
 
     V1__create_widgets.sql     forward migration, version 1
-    U1__create_widgets.sql     optional undo for version 1
+    U1__create_widgets.sql     optional undo for version 1 (forward-only repos have none)
     V2__add_note.sql
 
 Versions sort numerically (dotted versions such as `V1.2` are allowed).
@@ -23,7 +24,7 @@ from pathlib import Path
 from sg.adapters.base import MigrationAdapter
 from sg.core.models import Migration
 
-_CANDIDATE_DIRS = ("migrations", "db/migrations")
+_CANDIDATE_DIRS = ("migrations", "db/migrations", "db/migration", "src/main/resources/db/migration", "sql")
 _FILE = re.compile(r"^(?P<kind>[VU])(?P<version>\d+(?:[._]\d+)*)__(?P<desc>.+)\.sql$")
 HISTORY_TABLE = "schema_guard_history"
 
@@ -43,8 +44,8 @@ class _Files:
         return f"V{self.version}"
 
 
-def _find_dir(service_root: Path) -> Path | None:
-    for rel in _CANDIDATE_DIRS:
+def _find_dir(service_root: Path, configured: str | None = None) -> Path | None:
+    for rel in ([configured] if configured else _CANDIDATE_DIRS):
         d = Path(service_root) / rel
         if d.is_dir() and any(
             (m := _FILE.match(p.name)) and m["kind"] == "V" for p in d.iterdir()
@@ -55,6 +56,9 @@ def _find_dir(service_root: Path) -> Path | None:
 
 class RawSqlAdapter(MigrationAdapter):
     name = "raw_sql"
+    # Undo files are optional in Flyway (and a paid feature), so forward-only is the norm.
+    requires_downgrade = False
+    migrations_dir: str | None = None  # set from the service's `migrations_dir:`
 
     @classmethod
     def detect(cls, service_root: Path) -> bool:
@@ -64,11 +68,12 @@ class RawSqlAdapter(MigrationAdapter):
     # -- files -----------------------------------------------------------------
 
     def _dir(self) -> Path:
-        d = _find_dir(self.service_root)
+        d = _find_dir(self.service_root, self.migrations_dir)
         if d is None:
+            where = self.migrations_dir or "{" + ",".join(_CANDIDATE_DIRS) + "}"
             raise FileNotFoundError(
-                f"no V<version>__<desc>.sql files under {self.service_root}/"
-                f"{{{','.join(_CANDIDATE_DIRS)}}}"
+                f"no V<version>__<desc>.sql files under {self.service_root}/{where}; "
+                "set `migrations_dir:` for this service in schema-guard.yaml"
             )
         return d
 
@@ -203,13 +208,17 @@ class RawSqlAdapter(MigrationAdapter):
             files = self._files()
             d = self._dir()
             nxt = (_version_key(files[-1].version)[0] + 1) if files else 1
+            uses_undo = any(f.undo for f in files)
         except Exception:
-            d, nxt = Path("migrations"), 1
+            d, nxt, uses_undo = Path("migrations"), 1, False
+        undo = (f"- Always add the matching undo file U{nxt}__<same description>.sql that exactly reverts it."
+                if uses_undo else
+                "- This repo is forward-only (no U files): no undo file; a rollback is a new forward migration.")
         return "\n".join(
             [
                 "Plain-SQL (Flyway-style) conventions for a new migration:",
                 f"- Add {d}/V{nxt}__<snake_case_description>.sql (next version: V{nxt}).",
-                f"- Always add the matching undo file U{nxt}__<same description>.sql that exactly reverts it.",
+                undo,
                 "- Each file runs in one transaction; never edit a V file that has shipped.",
                 "- Plain PostgreSQL DDL; NUMERIC for quantities, BIGINT cents for money; never float/real.",
                 "- ALTERs on existing tables: start with SET lock_timeout = '3s';",

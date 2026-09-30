@@ -1,0 +1,73 @@
+# Reusable schema-guard gate. Call it from a repo that has migrations:
+#
+#   on:
+#     pull_request:
+#       types: [opened, synchronize, reopened, labeled, unlabeled]
+#   jobs:
+#     schema-guard:
+#       uses: vialyx/schema-guard/.github/workflows/gate.yml@main
+#
+# Exit: GO passes, REFUSED fails, NEEDS-HUMAN fails until someone with write access adds the
+# approval label (pair it with CODEOWNERS review on migration dirs and schema-guard.yaml).
+name: schema-guard gate
+
+on:
+  workflow_call:
+    inputs:
+      setup:
+        description: Shell commands that install what your services' tests and Alembic env.py import
+        type: string
+        default: ""
+      working-directory:
+        description: Directory with schema-guard.yaml (default the repo root)
+        type: string
+        default: "."
+      approve-label:
+        description: PR label that accepts a NEEDS-HUMAN verdict
+        type: string
+        default: "schema-guard:approved"
+      sg-version:
+        description: schema-guard git ref to run (pin a tag for reproducible results)
+        type: string
+        default: main
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    services:
+      postgres:  # throwaway server for the up/down/up round trip and the invariants
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      SG_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # "shipped" means "on the base branch", so the history is needed
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-node@v4  # squawk lock linter runs via npx
+        with:
+          node-version: 22
+      - name: Service setup
+        if: inputs.setup != ''
+        env:
+          SETUP: ${{ inputs.setup }}
+        run: bash -c "$SETUP"
+      - name: schema-guard
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          SG_VERSION: ${{ inputs.sg-version }}
+          BASE: origin/${{ github.base_ref }}
+          APPROVED: ${{ contains(github.event.pull_request.labels.*.name, inputs.approve-label) }}
+        run: |
+          flags=()
+          [[ "$APPROVED" == "true" ]] && flags+=(--allow-needs-human)
+          uvx --from "git+https://github.com/vialyx/schema-guard@${SG_VERSION}#subdirectory=plugins/schema-guard/engine" \
+            sg ci --base "$BASE" "${flags[@]}"
