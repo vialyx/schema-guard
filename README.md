@@ -34,39 +34,30 @@ claude --plugin-dir "$OLDPWD/plugins/schema-guard"
 ```
 
 ## Adopt it in your repo
-1. **Add `schema-guard.yaml` at the repo root.** It lists your services and migration framework, table classes and sizes, and invariants. Copy the annotated [example](examples/acme-mini-org/schema-guard.yaml). The minimum looks like this:
-   ```yaml
-   version: 1
-   dialect: postgres
-   base_ref: main                      # a migration on this branch counts as "shipped"
-   services:
-     - {path: services/api, adapter: alembic, seed: seed.sql, tests: "python -m pytest -q"}
-   tables:
-     ledger_entries: {class: ledger, est_rows: 12000000}   # ledger | audit | hot | core | scratch
-   invariants:
-     - {name: ledger balance, sql: "SELECT account_code, SUM(amount_cents) FROM ledger_entries GROUP BY 1 ORDER BY 1", expect: unchanged}
-   ```
-   Adapters available today: `alembic` and `raw_sql` (Flyway-style `V1__x.sql` / `U1__x.sql`). To add another, see [docs/adding-a-framework.md](docs/adding-a-framework.md).
-2. **Add the supporting files the checks and skill read:**
-   - `CODEOWNERS`: the required reviewers shown on the card;
-   - `seed.sql` per service: realistic, synthetic data for the invariant checks;
-   - `LEARNINGS.md` (optional): org decisions and incident lessons. The skill proposes entries but never commits them.
-3. **Enable the plugin for everyone** in `.claude/settings.json`:
-   ```json
-   {
-     "extraKnownMarketplaces": {
-       "schema-guard": {"source": {"source": "github", "repo": "vialyx/schema-guard"}}
-     },
-     "enabledPlugins": {"schema-guard@schema-guard": true}
-   }
-   ```
-4. **Gate merges in CI.** Copy [examples/ci/schema-guard.yml](examples/ci/schema-guard.yml) to `.github/workflows/` and make it a required check. It runs `sg check` and `sg verdict` on each changed service, needs no LLM or secrets, and fails on anything other than GO.
+```bash
+alias sg='uvx --from "git+https://github.com/vialyx/schema-guard#subdirectory=plugins/schema-guard/engine" sg'
+sg init      # finds your services, writes schema-guard.yaml, the CI workflow, .claude/settings.json, .gitignore
+sg doctor    # checks uv, squawk, the throwaway database, the base branch and each service
+```
+Then:
+1. **Review the TODOs in `schema-guard.yaml`:** confirm the guessed table classes (`ledger | audit | hot | core | scratch`), add `est_rows` from production, a `tests:` command and a `seed.sql` (synthetic data) per service, and invariants for money tables. The annotated [example](examples/acme-mini-org/schema-guard.yaml) shows every option.
+2. **Add CODEOWNERS entries** for migration directories and `schema-guard.yaml`. The card names them as required reviewers, and changes to the policy need their approval.
+3. **Commit, and make the `schema-guard` check required.** The workflow calls the reusable [gate](.github/workflows/gate.yml): no LLM, no secrets.
+   - GO passes, and REFUSED always fails.
+   - NEEDS-HUMAN fails until someone with write access adds the `schema-guard:approved` label.
+   - PRs that don't touch migrations pass immediately.
 
-No production credentials are needed anywhere.
+Without `schema-guard.yaml`, `sg` finds services by itself (zero-config), but every table is then of unknown size and class, so expect more NEEDS-HUMAN.
+
+**Frameworks:** `alembic`, and `raw_sql` (Flyway-style `V1__x.sql`, optional `U1__x.sql` undo files; forward-only is the default; set `migrations_dir:` for unusual layouts). Tests and Alembic's `env.py` run in the service's own Python: `python:` per service, otherwise `.venv`. To add a framework, see [docs/adding-a-framework.md](docs/adding-a-framework.md).
+
+**Org-wide policy:** put shared rules (money column patterns, lint severities) in one file and reference it with `extends: https://…/schema-guard-org.yaml` (or `$SG_ORG_POLICY`). Keys the org lists under `locked:` can't be overridden by a repo.
+
+No production credentials are needed anywhere. `sg` only ever connects to a throwaway database, and it stops if Alembic's `env.py` tries to connect anywhere else.
 
 ## Daily use
-- **Write a change:** `/schema-guard:safe-schema-change add <column> to <table> …`. Expect questions first if the request is ambiguous.
-- **Review a change:** `/schema-guard:safe-schema-change review migration 0005`. It produces a verdict card you can paste into the PR, with the required reviewers.
+- **Write a change:** ask Claude Code for it ("add an optional notes column to orders"); the skill picks it up, or type `/schema-guard:safe-schema-change …`. Small additive changes take a fast path; ambiguous ones get questions first.
+- **Review a change:** "review migration 0005". It produces a verdict card to paste into the PR, with the required reviewers.
 - **Run it by hand:**
 
   | Command | Does |
@@ -74,9 +65,11 @@ No production credentials are needed anywhere.
   | `sg detect` | Shows the service, framework and tools found, and each migration's shipped or pending state |
   | `sg investigate --tables a,b [--columns t.c]` | Shows DDL, table class, size and callers |
   | `sg check [--path svc] [--base ref]` | Runs all checks and writes `.schema-guard/checks.json` |
-  | `sg verdict [--llm llm.json]` | Prints the card and writes `.schema-guard/verdict.json` and `card.md` |
+  | `sg verdict [--intent … --summary …]` | Prints the card and writes `.schema-guard/verdict.json` and `card.md` |
+  | `sg ci [--base origin/main]` | The CI gate: runs check and verdict for every service whose migrations changed |
+  | `sg init` / `sg doctor` | Sets up a repo / explains what's missing |
 
-  `sg` is `plugins/schema-guard/bin/sg`. To run it without cloning: `uvx --from "git+https://github.com/vialyx/schema-guard#subdirectory=plugins/schema-guard/engine" sg`.
+  Inside Claude Code, `sg` is the plugin's `bin/sg`.
 
 ## Example
 [examples/walkthrough](examples/walkthrough/) is a recorded two-turn session:

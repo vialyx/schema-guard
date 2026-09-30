@@ -29,7 +29,8 @@ class RoundtripCheck(Check):
     order = 30
 
     def run(self, ctx: Context) -> CheckResult:
-        require_down = ctx.policy.check_config(self.name).get("require_downgrade", True)
+        require_down = ctx.policy.check_config(self.name).get(
+            "require_downgrade", getattr(ctx.adapter, "requires_downgrade", True))
         dsn = ctx.db_server().create_database("roundtrip")
         base = ctx.base_revision
         a, d = ctx.adapter, ctx.dialect

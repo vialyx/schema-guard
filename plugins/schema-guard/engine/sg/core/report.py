@@ -46,19 +46,20 @@ def card(doc: dict[str, Any]) -> str:
             out.append(f"- [contract — follow-up ticket] {step}")
 
     if doc["checks"]:
-        out.append("\n| Check | Status | Summary |\n|---|---|---|")
-        for c in doc["checks"]:
-            out.append(f"| {c['name']} | {ICON[c['status']]} {c['status']} | {_cell(c.get('summary', ''))} |")
+        # One line; anything that isn't a pass is already explained under "Why not GO".
+        out.append("\n**Checks:** " + " · ".join(f"{ICON[c['status']]} {c['name']}" for c in doc["checks"]))
     else:
         out.append("\n**Checks:** none run yet (run `sg check` once a migration exists).")
 
-    other = [f for f in doc["findings"] if f["severity"] in ("ask", "warn")]
-    if other:
+    asks = [f for f in doc["findings"] if f["severity"] == "ask"]
+    if asks:
         out.append("\n**Findings**")
-        for f in other:
-            ev = f" (`{f['evidence']}`)" if f.get("evidence") else ""
-            fix = f" — {f['fix']}" if f.get("fix") else ""
-            out.append(f"- {ICON[f['severity']]} `{f['rule']}` {f['message']}{ev}{fix}")
+        out += [_finding(f) for f in asks]
+    warns = [f for f in doc["findings"] if f["severity"] == "warn"]
+    if warns:
+        out.append(f"\n<details><summary>{len(warns)} warning(s), non-blocking</summary>\n")
+        out += [_finding(f) for f in warns]
+        out.append("\n</details>")
 
     if doc.get("suggestions"):
         out.append("\n**Suggestions (non-blocking)**")
@@ -66,6 +67,8 @@ def card(doc: dict[str, Any]) -> str:
 
     if doc["owners"]:
         out.append(f"\n**Required reviewers:** {' '.join(doc['owners'])}")
+    elif doc["files_changed"]:
+        out.append("\n**Required reviewers:** none found (add a CODEOWNERS file to route reviews)")
     if doc["files_changed"]:
         out.append("\n<details><summary>Files</summary>\n\n" + "\n".join(f"- `{p}`" for p in doc["files_changed"]) + "\n</details>")
     return "\n".join(out) + "\n"
@@ -79,6 +82,11 @@ def _strip_number(s: str) -> str:
     return _LEADING_NUMBER.sub("", s, count=1)
 
 
-def _cell(s: str) -> str:
-    s = s.replace("|", "\\|").replace("\n", " ")
-    return s if len(s) <= 140 else s[:137] + "..."
+def _finding(f: dict[str, Any]) -> str:
+    line = f"- {ICON[f['severity']]} `{f['rule']}` {f['message']}" + (f" — {f['fix']}" if f.get("fix") else "")
+    ev = (f.get("evidence") or "").strip()
+    if not ev:
+        return line
+    if "\n" in ev or "`" in ev or len(ev) > 120:  # tracebacks, SQL: a fenced block keeps the markdown intact
+        return f"{line}\n  ```\n" + "\n".join(f"  {x}" for x in ev.splitlines()[-12:]) + "\n  ```"
+    return f"{line} (`{ev}`)"

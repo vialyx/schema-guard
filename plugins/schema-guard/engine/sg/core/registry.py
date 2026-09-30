@@ -60,10 +60,16 @@ def detect_adapter(service_root: Path, preferred: str | None = None) -> "Migrati
             raise ValueError(f"adapter '{preferred}' not registered; have {sorted(available)}")
         return available[preferred](service_root)
     matches = [cls for cls in available.values() if cls.detect(service_root)]
-    if len(matches) != 1:
-        names = [c.name for c in matches] or "none"
+    if not matches:
         raise ValueError(
-            f"could not pick a migration adapter for {service_root} (matched: {names}); "
+            f"no migrations found in {service_root} (looked for alembic.ini, and V<n>__*.sql under "
+            "migrations/, db/migrations/, db/migration/, src/main/resources/db/migration/, sql/). "
+            "Run `sg init` to find your services, or set `services: [{path: <service dir>}]` "
+            "(plus `migrations_dir:` for plain SQL) in schema-guard.yaml"
+        )
+    if len(matches) > 1:
+        raise ValueError(
+            f"several migration frameworks match {service_root} ({[c.name for c in matches]}); "
             "set `adapter:` for this service in schema-guard.yaml"
         )
     return matches[0](service_root)

@@ -5,7 +5,7 @@ license: MIT
 compatibility: Needs `uv`, `git` and a local PostgreSQL (or SG_DATABASE_URL pointing at a disposable server). Works best in Claude Code with the schema-guard plugin (adds the `sg` command, an edit guard hook and a verifier subagent).
 metadata:
   version: "0.1.0"
-allowed-tools: Bash(sg:*) Bash(git diff:*) Bash(git status:*) Bash(git log:*) Read Grep Glob
+allowed-tools: Bash(sg:*) Bash(git diff:*) Bash(git status:*) Bash(git log:*) Read Grep Glob Edit Write
 ---
 
 # Safe schema change
@@ -29,9 +29,14 @@ You are the *reasoning* half. The `sg` command is the *deterministic* half: it d
 Run `sg detect` (from the repo or service directory). It returns the migration framework, the migrations and their state (`shipped` / `new` / `shipped-EDITED`), the org policy (table classes, money/quantity column patterns), the framework's conventions hint, tools available (database, squawk), and `LEARNINGS.md`.
 If `all_services` lists more than one service, pick the one the change belongs to and pass `--path <service dir>` to **every** `sg` command (e.g. `sg check --path services/catalog-db`).
 Read the learnings; they record past incidents and org decisions (units, currencies, naming). Treat them as policy.
-If `sg detect` errors (no migrations found, several frameworks), tell the user what it said and how to fix `schema-guard.yaml`; do not guess.
+If `sg detect` errors (no migrations found, several frameworks), tell the user what it said; `sg init` writes a starting `schema-guard.yaml` and `sg doctor` explains missing tools. Do not guess.
 
 ### Phase 1 — Classify the request
+- **Fast path:** a purely additive change (a nullable column without a backfill, a new table, a new index)
+  on tables whose class is not `ledger`, `audit` or `hot`, with units and meaning stated or obvious.
+  Skip Phases 2–3: write it (Phase 4), run `sg check`, then
+  `sg verdict --intent "..." --summary "..."`. Any finding, unclear meaning or unknown table size puts you
+  back on the full path.
 - **Author mode:** the user describes an intent ("add X to Y"). Continue to Phase 2.
 - **Review mode:** a migration already exists (new file in the diff, or a PR). Skip to Phase 5.
 - If the request requires editing a `shipped` migration → **REFUSE** immediately; offer to write a corrective migration instead.
@@ -47,7 +52,7 @@ Also read the models and the code paths that use the table (Grep/Read) so the ch
 - unresolved callers exist and you would rename/drop/retype something they may use;
 - the change touches a ledger/audit table in any way other than adding a nullable column.
 
-How to ask: at most 5 numbered questions, each with concrete options and your recommended default. Then write llm.json with `questions` and run `sg verdict --llm .schema-guard/llm.json` so the engineer gets a NEEDS-HUMAN card they can paste into the ticket. **End your turn** — wait for answers.
+How to ask: at most 5 questions, each with concrete options and your recommended default. Then run `sg verdict --intent "..." --question "..." --question "..."` (or write llm.json with `questions`) so the engineer gets a NEEDS-HUMAN card they can paste into the ticket. **End your turn** — wait for answers.
 Non-interactive (CI / `claude -p`): never wait; always finish with the NEEDS-HUMAN card.
 
 ### Phase 3 — Plan (expand / contract)
@@ -61,7 +66,8 @@ Follow `conventions_hint` from `sg detect` exactly (file naming, next revision i
 Run `sg check`. It runs, as applicable: policy rules, squawk (lock/rewrite linter), callers scan, up→down→up round-trip, business invariants on seed data (before, after, and on re-run), and the service tests.
 - Author mode: fix findings that are fixable in the migration/code, then re-run `sg check` (max 2 iterations).
 - Review mode: do not rewrite someone else's migration unless asked; report findings with concrete fixes.
-- `skipped` checks (no database, no squawk) cap the verdict at NEEDS-HUMAN. Say which tool is missing and how to install it; do not pretend the check passed.
+- `skipped` checks (no database, no squawk, no base ref) cap the verdict at NEEDS-HUMAN. Say which tool is missing and suggest `sg doctor`; do not pretend the check passed.
+- `policy-changed`: the change edits schema-guard.yaml, so checks ran with the base branch's policy. That is expected; its owners must approve.
 - Do not "fix" a finding by weakening the migration's intent without telling the user.
 
 Optional second opinion (Claude Code): delegate to the `migration-verifier` subagent with the migration path(s) and `.schema-guard/checks.json`. It reads code only and returns concerns; if it recommends escalation you agree with, include it.
@@ -70,6 +76,8 @@ Optional second opinion (Claude Code): delegate to the `migration-verifier` suba
 Write `.schema-guard/llm.json` (format: `references/verdict-card.md`) with: `intent`, a 1–2 sentence `summary`, `plan.expand` / `plan.contract`, `files_changed`, remaining `questions`, non-blocking `suggestions`, and optional `escalate` + `escalation_reason`. Then run:
 
 `sg verdict --llm .schema-guard/llm.json`
+
+For a simple change, flags replace the file: `sg verdict --intent "..." --summary "..." [--suggestion "..."] [--question "..."] [--escalate NEEDS-HUMAN --reason "..."]`.
 
 **`questions` vs `suggestions`.** A question blocks GO, so use it only when shipping as written could be unsafe or wrong (the Phase 2 list, or a finding you cannot resolve). Nice-to-haves (an extra CHECK, a follow-up integration, naming) go in `suggestions`; they appear on the card but do not change the verdict. Over-asking trains people to ignore the tool.
 

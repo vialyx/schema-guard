@@ -26,7 +26,6 @@ checks:
       require-concurrent-index-creation: ask
       disallowed-unique-constraint: ask
       ban-truncate-cascade: refuse
-  roundtrip:
-    require_downgrade: true
+  roundtrip: {}            # require_downgrade defaults per framework: alembic true, raw_sql false
   tests:
     timeout_seconds: 300
