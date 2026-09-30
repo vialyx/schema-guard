@@ -22,9 +22,9 @@ I'll start with detection and read the policy files.
 
 Business meaning is unresolved, so per Phase 2 I'll ask before generating anything. First I'll check the card format.
 
-> **Bash** `cat "/Users/maksimvialykh/Library/Application Support/Claude/scratch-workspaces/2373eecf-f1a9-4218-9226-33794f158cc9/b6cf10f0-5386-4f06-889f-3756b5c72a79/scratch-2026-09-29-2bba07/schema-guard/plugins`
+> **Bash** `cat "/opt/schema-guard/plugins`
 
-> **Read** `/Users/maksimvialykh/Library/Application Support/Claude/scratch-workspaces/2373eecf-f1a9-4218-9226-33794f158cc9/b6cf10f0-5386-4f06-889f-3756b5c72a79/scratch-2026-09-29-2bba07/schema-guard/plugins/schema-guard/skills/safe-schema-change/references/verdict-card.md`
+> **Read** `/opt/schema-guard/plugins/schema-guard/skills/safe-schema-change/references/verdict-card.md`
 
 > **Write** `.schema-guard/llm.json`
 
@@ -112,27 +112,27 @@ The verifier is running in the background. I'll write the verdict once it report
 {"concerns": [
   {"severity": "ask",
    "what": "legacy-sync pull_updates runs UPDATE orders SET {field} = %s from ERP_FIELD_MAP plus ERP_EXTRA_FIELDS. The two new CHECK constraints are enforced on every write. ERP edits to net_weight_kg or a deduction field can now fail the whole batch (an unhandled exception, with no per-row handling before conn.commit()). Concretely, lowering net_weight_kg below an existing grade_deduction_kg violates ck_orders_grade_deduction_le_net. The field is also not in ERP_FIELD_MAP, so ERP-side deductions are never synced. Values arrive as latin-1 CSV strings, and an empty string would fail the numeric cast. The static caller check only lists these sites as unresolved and does not clear them. Per LEARNINGS 2026-07, @acme/integrations must confirm.",
-   "where": "/private/var/folders/vs/520w5bhd1qn25ndtsmhg2zwh0000gn/T/sg-walkthrough-y3vjonoy/repo/services/legacy-sync/sync.py:59",
+   "where": "/tmp/sg-walkthrough/repo/services/legacy-sync/sync.py:59",
    "suggestion": "Get @acme/integrations sign-off. Check whether ERP_EXTRA_FIELDS in production maps anything to grade_deduction_kg. Decide whether pull_updates should handle constraint violations per row. State explicitly that the ERP does not carry deductions."},
   {"severity": "ask",
    "what": "Billing semantics change for existing data: expected value now uses net minus deduction. Historical rows are NULL, so their value is unchanged. But if a deduction is recorded after an order is already billed and posted, reconcile() reports a mismatch (the test shows +8,500). Nothing produces the reversing and corrected ledger entries, and there is no documented process or owner for that. Because the ledger is append-only, this must be done by reversal.",
-   "where": "/private/var/folders/vs/520w5bhd1qn25ndtsmhg2zwh0000gn/T/sg-walkthrough-y3vjonoy/repo/services/ledger-api/app/services/reconciliation.py:29",
+   "where": "/tmp/sg-walkthrough/repo/services/ledger-api/app/services/reconciliation.py:29",
    "suggestion": "Say who or what posts the reversing and corrected AR entries when a deduction is set. Alternatively, state that the mismatch report is the intended trigger."},
   {"severity": "ask",
    "what": "Completeness: no write path exists for grade_deduction_kg. There is no API, serializer or importer change. The order importer, order_import_staging and the legacy-sync push were not updated or confirmed. Only reconciliation reads the column. Other consumers of net_weight_kg may need accepted weight: the sync push sends raw net weight to the ERP, and inventory_movements.quantity_kg is unrelated. If they should use accepted weight they are unchanged.",
-   "where": "/private/var/folders/vs/520w5bhd1qn25ndtsmhg2zwh0000gn/T/sg-walkthrough-y3vjonoy/repo/services/ledger-api/app/models.py:39",
+   "where": "/tmp/sg-walkthrough/repo/services/ledger-api/app/models.py:39",
    "suggestion": "List the intended writers of the column. Confirm that the sync push and any other reports should keep net weight."},
   {"severity": "ask",
    "what": "Rollback is lossy: downgrade drops the column, and any deductions recorded after deploy are discarded silently. Those deductions affect billing. After a downgrade, reconciliation reverts to net weight and would flag orders whose ledger entries were already corrected. The migration docstring or comments do not state that this loss is acceptable. The roundtrip check only verifies schema, on data with no deductions.",
-   "where": "/private/var/folders/vs/520w5bhd1qn25ndtsmhg2zwh0000gn/T/sg-walkthrough-y3vjonoy/repo/services/ledger-api/migrations/versions/0005_add_orders_grade_deduction.py:38",
+   "where": "/tmp/sg-walkthrough/repo/services/ledger-api/migrations/versions/0005_add_orders_grade_deduction.py:38",
    "suggestion": "Document that downgrade is only safe before deductions are used. Otherwise require exporting the column first (for example into audit_log or a side table)."},
   {"severity": "note",
    "what": "The 0006 downgrade is a no-op, as documented. Downgrading from 0006 to 0005 leaves the constraints valid, which is harmless. Sequencing is sound. The 0005 expand step is backward compatible: the column is nullable, and the CHECKs pass for existing rows because the column is NULL. 0006 is a separate migration, which is fine. One caveat: the constraints are enforced from 0005 onward, so old code that writes the column would be checked. No deployed code writes it.",
-   "where": "/private/var/folders/vs/520w5bhd1qn25ndtsmhg2zwh0000gn/T/sg-walkthrough-y3vjonoy/repo/services/ledger-api/migrations/versions/0006_validate_orders_grade_deduction.py:26",
+   "where": "/tmp/sg-walkthrough/repo/services/ledger-api/migrations/versions/0006_validate_orders_grade_deduction.py:26",
    "suggestion": "No change needed."},
   {"severity": "note",
    "what": "Test gaps: no test exercises a deduction greater than net weight (which the DB rejects but the pure function silently turns into a negative weight and negative bill). No test covers a deduction with a billed status other than delivered, or half-up rounding with a deduction. accepted_weight_kg does not clamp or assert, so it is only safe because of the constraint. Also, Decimal(order.grade_deduction_kg or 0) treats Decimal('0') as falsy, which is harmless.",
-   "where": "/private/var/folders/vs/520w5bhd1qn25ndtsmhg2zwh0000gn/T/sg-walkthrough-y3vjonoy/repo/services/ledger-api/tests/test_reconciliation.py:46",
+   "where": "/tmp/sg-walkthrough/repo/services/ledger-api/tests/test_reconciliation.py:46",
    "suggestion": "Add a test or assertion that a deduction above net weight is rejected or flagged. Optionally add a DB-level test for the constraints."}
 ],
 "recommend_escalation": null}

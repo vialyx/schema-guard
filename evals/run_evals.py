@@ -73,7 +73,8 @@ def prepare(case: dict, workdir: Path) -> Path:
 
 
 def clean_env(case: dict) -> dict:
-    env = {k: v for k, v in os.environ.items() if not k.startswith("SG_")}
+    # Drop stray SG_* switches, but keep the server URL: CI and root containers can't run initdb.
+    env = {k: v for k, v in os.environ.items() if not k.startswith("SG_") or k == "SG_DATABASE_URL"}
     env.update({k: str(v) for k, v in (case.get("env") or {}).items()})
     return env
 
@@ -130,12 +131,18 @@ def run_skill(case: dict, model: str | None, keep: bool) -> dict:
         if model:
             cmd += ["--model", model]
         t0 = time.time()
+        error = None
         try:
             r = sh(cmd, cwd=repo, env=clean_env(case), timeout=1200)
             meta = json.loads(r.stdout) if r.stdout.strip().startswith("{") else {"result": r.stdout[-500:], "stderr": r.stderr[-500:]}
+            if r.returncode != 0 or meta.get("is_error") or not meta.get("num_turns"):
+                # CLI/API failure (auth, usage limit, network): not a judgement about the skill.
+                error = f"claude exited {r.returncode}: {(meta.get('result') or r.stderr or '')[-300:]}"
         except subprocess.TimeoutExpired:
             meta = {"result": "TIMEOUT"}
         out = score(case, read_verdict(repo), repo)
+        if error:
+            out.update({"verdict": "ERROR", "ok": False, "problems": [error], "error": True})
         out.update({
             "case": case["id"], "kind": "skill",
             "cost_usd": meta.get("total_cost_usd"), "turns": meta.get("num_turns"),
@@ -172,7 +179,7 @@ def summarize(cases: list[dict], results: list[dict], runs: int) -> str:
     consistencies = []
     total_cost = 0.0
     for c in cases:
-        rs = [r for r in results if r["case"] == c["id"] and r["kind"] == "skill"]
+        rs = [r for r in results if r["case"] == c["id"] and r["kind"] == "skill" and not r.get("error")]
         bs = [r for r in results if r["case"] == c["id"] and r["kind"] == "baseline"]
         verdicts = [r["verdict"] for r in rs]
         cons = Counter(verdicts).most_common(1)[0][1] / len(verdicts) if verdicts else 0
@@ -199,7 +206,10 @@ def summarize(cases: list[dict], results: list[dict], runs: int) -> str:
         f"- Total skill cost: ${total_cost:.2f}",
         "",
     ]
-    fails = [r for r in results if not r["ok"]]
+    errors = [r for r in results if r.get("error")]
+    if errors:
+        head.insert(-1, f"- ⚠️ {len(errors)} run(s) failed to execute (CLI/API error) and are excluded above; re-run them")
+    fails = [r for r in results if not r["ok"] and not r.get("error")]
     tail = ["", "## Failures", ""] + [f"- `{r['case']}` ({r['kind']}): {'; '.join(r['problems'])}" for r in fails] if fails else []
     return "\n".join(head + lines + tail) + "\n"
 
@@ -242,6 +252,8 @@ def main() -> int:
     (RESULTS / "latest.md").write_text(report)
     print("\n" + report)
     skill = [r for r in results if r["kind"] == "skill"]
+    if any(r.get("error") for r in skill):
+        return 3
     return 0 if all(r["ok"] for r in skill) else 1
 
 
