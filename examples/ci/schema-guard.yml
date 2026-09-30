@@ -1,0 +1,51 @@
+# Copy to .github/workflows/schema-guard.yml in a repo that has a schema-guard.yaml.
+# Runs the deterministic gate (no LLM, no secrets) on every PR that touches a service with migrations.
+# Exit codes: 0 GO, 1 NEEDS-HUMAN, 2 REFUSED, 3 could not run. Make this job a required check.
+name: schema-guard
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    services:
+      postgres:  # throwaway server for the up/down/up round trip and invariants
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      SG_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+      # Pin to a tag or commit for reproducible results.
+      SG_FROM: git+https://github.com/vialyx/schema-guard@main#subdirectory=plugins/schema-guard/engine
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # "shipped" means "exists on the base branch", so history is needed
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-node@v4  # squawk lock linter runs via npx
+        with:
+          node-version: 22
+      # Add setup for your services' own test commands here (e.g. install their Python deps).
+      - name: Check changed services
+        env:
+          BASE: origin/${{ github.base_ref }}
+        run: |
+          sg() { uvx --from "$SG_FROM" sg "$@"; }
+          worst=0
+          for svc in $(sg detect | jq -r '.all_services[].path'); do
+            git diff --quiet "$BASE"...HEAD -- "$svc" && continue
+            echo "::group::$svc"
+            sg check --path "$svc" --base "$BASE" > /dev/null
+            sg verdict --path "$svc" | tee -a "$GITHUB_STEP_SUMMARY"
+            rc=${PIPESTATUS[0]}
+            echo "::endgroup::"
+            (( rc > worst )) && worst=$rc
+          done
+          exit $worst

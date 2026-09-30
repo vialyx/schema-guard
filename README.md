@@ -1,135 +1,108 @@
 # schema-guard
 
-An AI engineering skill for **safe database schema changes on business-critical tables**: ledgers, money and inventory.
-It investigates, asks when business meaning is unclear, writes the migration the org's way, proves it with deterministic checks, and ends with a verdict: **GO / NEEDS-HUMAN / REFUSED**.
+A Claude Code plugin for safe schema changes on business-critical tables such as ledgers, money and inventory.
+It writes or reviews a migration, proves it with deterministic checks, and ends with one verdict:
 
-## The problem
-AI coding tools write plausible migrations, and schema changes are where "plausible" hurts most. Typical mistakes:
-- FLOAT for money
-- a NOT NULL that locks a 40M-row table
-- a rename that breaks a dynamic-SQL job nobody knew about
-- editing a migration that already shipped
-- "fixing" a posted ledger row in place
-
-These rarely fail in review, because they look fine. They fail in production.
+| Verdict | Meaning | CI exit |
+|---|---|---|
+| 🟢 **GO** | All checks passed and nothing is unclear. Normal review applies. | 0 |
+| 🟡 **NEEDS-HUMAN** | A named owner must decide: an open question, a risky lock, unknown callers, or a check that couldn't run. | 1 |
+| 🔴 **REFUSED** | Unsafe as written, e.g. FLOAT money, editing a shipped migration, rewriting ledger rows. The card gives the safe alternative. | 2 |
 
 ## How it works
-Two halves with a hard boundary ([docs/architecture.md](docs/architecture.md)):
-
-- **The skill** ([SKILL.md](plugins/schema-guard/skills/safe-schema-change/SKILL.md)) is the reasoning half. It runs phased workflow: detect → classify → investigate → *ask?* → plan (expand/contract) → *refuse?* → generate → validate → verdict → learn.
-- **`sg`** (the Python engine) is the deterministic half:
-  - policy rules (`float-on-money`, `destructive-change`, `mutate-ledger-rows`, …);
+- **The skill** does the reasoning. It investigates the tables and callers, and asks when business meaning is unclear (units, NULL meaning, backfill). It writes backward-compatible (expand/contract) migrations, plus the model, code and tests.
+- **The `sg` engine** runs deterministic checks with no LLM:
+  - 7 policy rules;
   - [squawk](https://squawkhq.com) lock linting;
-  - a repo-wide callers scan that flags dynamic SQL as *unresolved*;
-  - an up→down→up round trip on a throwaway Postgres;
-  - business invariants on seed data (for example, ledger balances unchanged);
+  - a callers scan (dynamic SQL is reported as *unresolved*);
+  - an up → down → up round trip on a throwaway Postgres;
+  - business invariants on seed data;
   - the service's own tests.
-- **Verdict rule:** checks set the floor. The LLM can only *escalate*, never lower. A skipped check or an open question never yields GO.
-- **Claude Code extras:** a `PreToolUse` hook that blocks edits to shipped migrations, and a read-only `migration-verifier` subagent.
+- **The verdict rule:** the checks set the minimum verdict. The model can only make the verdict stricter, never more lenient. A skipped check or an open question never yields GO.
+- **Guardrails:** a hook blocks edits to migrations that have already shipped, and a read-only verifier subagent re-checks the result.
 
-## Quick start
-Requirements: [uv](https://docs.astral.sh/uv/), git, and PostgreSQL binaries (`brew install postgresql@16`) or `SG_DATABASE_URL` pointing at a disposable server. Also Node (for `npx squawk-cli`).
+Details: [docs/architecture.md](docs/architecture.md).
+
+## Try it (5 minutes)
+Requirements: [uv](https://docs.astral.sh/uv/), git, Node, and either PostgreSQL 16 binaries or a disposable server in `SG_DATABASE_URL`. You need `SG_DATABASE_URL` when `initdb` can't run, for example as root in a container.
 
 ```bash
-# try it on the demo org
-bash examples/build_fixture.sh /tmp/acme && cd /tmp/acme
-claude --plugin-dir /path/to/schema-guard/plugins/schema-guard
+git clone https://github.com/vialyx/schema-guard && cd schema-guard
+bash examples/build_fixture.sh /tmp/acme && cd /tmp/acme      # demo repo with shipped migrations
+claude --plugin-dir "$OLDPWD/plugins/schema-guard"
 > /schema-guard:safe-schema-change add an optional inspection_notes column to orders
 ```
 
-For a team, install it from the marketplace (`/plugin marketplace add vialyx/schema-guard`, then `/plugin install schema-guard@schema-guard`) and enable it per repo in `.claude/settings.json`. The CI gate needs no LLM:
+## Adopt it in your repo
+1. **Add `schema-guard.yaml` at the repo root.** It lists your services and migration framework, table classes and sizes, and invariants. Copy the annotated [example](examples/acme-mini-org/schema-guard.yaml). The minimum looks like this:
+   ```yaml
+   version: 1
+   dialect: postgres
+   base_ref: main                      # a migration on this branch counts as "shipped"
+   services:
+     - {path: services/api, adapter: alembic, seed: seed.sql, tests: "python -m pytest -q"}
+   tables:
+     ledger_entries: {class: ledger, est_rows: 12000000}   # ledger | audit | hot | core | scratch
+   invariants:
+     - {name: ledger balance, sql: "SELECT account_code, SUM(amount_cents) FROM ledger_entries GROUP BY 1 ORDER BY 1", expect: unchanged}
+   ```
+   Adapters available today: `alembic` and `raw_sql` (Flyway-style `V1__x.sql` / `U1__x.sql`). To add another, see [docs/adding-a-framework.md](docs/adding-a-framework.md).
+2. **Add the supporting files the checks and skill read:**
+   - `CODEOWNERS`: the required reviewers shown on the card;
+   - `seed.sql` per service: realistic, synthetic data for the invariant checks;
+   - `LEARNINGS.md` (optional): org decisions and incident lessons. The skill proposes entries but never commits them.
+3. **Enable the plugin for everyone** in `.claude/settings.json`:
+   ```json
+   {
+     "extraKnownMarketplaces": {
+       "schema-guard": {"source": {"source": "github", "repo": "vialyx/schema-guard"}}
+     },
+     "enabledPlugins": {"schema-guard@schema-guard": true}
+   }
+   ```
+4. **Gate merges in CI.** Copy [examples/ci/schema-guard.yml](examples/ci/schema-guard.yml) to `.github/workflows/` and make it a required check. It runs `sg check` and `sg verdict` on each changed service, needs no LLM or secrets, and fails on anything other than GO.
 
-```bash
-plugins/schema-guard/bin/sg check && plugins/schema-guard/bin/sg verdict
-```
+No production credentials are needed anywhere.
 
-## How an engineer uses it
-- **Author:** "add X to Y". The skill asks if units, NULL meaning or backfill are unclear, then writes the migration, model, code and tests, and runs the checks.
-- **Review:** "review migration 0005". It gives a verdict card to paste into the PR, with required reviewers from CODEOWNERS.
-- **CI:** `sg check && sg verdict` on PRs touching migrations. The exit code gates the merge.
+## Daily use
+- **Write a change:** `/schema-guard:safe-schema-change add <column> to <table> …`. Expect questions first if the request is ambiguous.
+- **Review a change:** `/schema-guard:safe-schema-change review migration 0005`. It produces a verdict card you can paste into the PR, with the required reviewers.
+- **Run it by hand:**
 
-## Context it needs (all versioned in the repo)
-| File | Purpose |
-|---|---|
-| `schema-guard.yaml` | Services and adapters; table classes (ledger/audit/hot/core/scratch) and sizes; money/quantity column patterns; invariants; rule overrides |
-| `CODEOWNERS` | Required reviewers |
-| `LEARNINGS.md` | Human-curated org decisions and incident lessons. The skill proposes entries and never commits them |
-| `seed.sql` | Realistic data for the invariant checks |
-| git base ref | Defines what has "shipped". No production credentials are ever needed |
+  | Command | Does |
+  |---|---|
+  | `sg detect` | Shows the service, framework and tools found, and each migration's shipped or pending state |
+  | `sg investigate --tables a,b [--columns t.c]` | Shows DDL, table class, size and callers |
+  | `sg check [--path svc] [--base ref]` | Runs all checks and writes `.schema-guard/checks.json` |
+  | `sg verdict [--llm llm.json]` | Prints the card and writes `.schema-guard/verdict.json` and `card.md` |
 
-## Worked example
-[examples/walkthrough](examples/walkthrough/) is a real two-turn session. [record.py](examples/walkthrough/record.py) reproduces it.
+  `sg` is `plugins/schema-guard/bin/sg`. To run it without cloning: `uvx --from "git+https://github.com/vialyx/schema-guard#subdirectory=plugins/schema-guard/engine" sg`.
 
-1. **Turn 1.** The request: "Procurement needs grade deductions on orders… reconciliation should use accepted weight."
-   - The skill investigated and wrote **no migration**.
-   - It returned NEEDS-HUMAN with 5 questions: units, one-vs-many deductions, NULL meaning, what to do about already-billed ledger rows (append-only → reversing entries), and the legacy ERP sync's dynamic SQL. See [card-turn1.md](examples/walkthrough/card-turn1.md).
-2. **Turn 2.** After the answers, it wrote:
-   - `0005`: a nullable `grade_deduction_kg NUMERIC(14,3)` plus CHECKs `>= 0` and `<= net_weight_kg`, both NOT VALID;
-   - `0006`: VALIDATE;
-   - updated model, reconciliation and tests (12 pass).
-
-   All six checks were green. The verdict stayed NEEDS-HUMAN for a reason no check could see: the legacy ERP job's `UPDATE orders SET {field}` could now hit the new CHECK and fail the nightly batch, so @acme/integrations must sign off. See [card-turn2.md](examples/walkthrough/card-turn2.md) and [changes.diff](examples/walkthrough/changes.diff).
+## Example
+[examples/walkthrough](examples/walkthrough/) is a recorded two-turn session:
+1. **An ambiguous request:** "add grade deductions to orders". The skill wrote no migration. It asked 5 questions ([card](examples/walkthrough/card-turn1.md)) covering units, cardinality, NULL meaning, already-billed ledger rows, and a legacy job that builds SQL at runtime.
+2. **After the answers:** it wrote the migrations, model, code and tests, and all checks passed. The verdict stayed **NEEDS-HUMAN** because the legacy job could now trip the new constraint, so its owners must sign off ([card](examples/walkthrough/card-turn2.md), [diff](examples/walkthrough/changes.diff)).
 
 ## Evals
-15 labelled cases ([evals/cases](evals/cases/)):
-- GO, including a false-positive trap;
-- NEEDS-HUMAN: ambiguous intent, a hot-table NOT NULL, dynamic callers, a LEARNINGS-driven case, no DB available;
-- REFUSED: editing a shipped migration, dropping a ledger column, FLOAT money, UPDATE of a posted entry, prompt injection in a migration docstring;
-- two cases on the raw-SQL adapter.
+There are 15 labelled cases across GO, NEEDS-HUMAN and REFUSED, including a false-positive trap and a prompt injection ([evals/cases](evals/cases/)). Each run starts from a fresh demo repo and runs headless `claude -p`.
 
-Each run starts from a fresh fixture and goes through headless `claude -p`. The runner also scores a deterministic-only baseline.
-
-```bash
-uv run --project plugins/schema-guard/engine python evals/run_evals.py --runs 3 --model sonnet
-```
-
-Results (Sonnet, 3 runs per case):
-
-| | correct |
+| (Sonnet, 3 runs per case) | Correct |
 |---|---|
-| Deterministic baseline (no LLM) | 8/15 cases (it can't author, ask or refuse intent) |
-| Skill v1 | 43/45 runs. All misses were the false-positive trap: it over-asked on a safe new table |
-| Skill v2 (added a non-blocking `suggestions` channel and an explicit "blocking question" test) | trap 3/3, ambiguous case still asks 3/3 |
+| Deterministic checks alone | 8/15 cases |
+| Skill v1 | 43/45 runs (both misses over-asked on a safe new table) |
+| Skill v2: adds non-blocking `suggestions` and a test for what counts as a blocking question | Trap case 3/3; the ambiguous case still asks, 3/3 |
 
-Cost: about $0.25 per run, 30–80 s.
+A run costs about $0.25 and takes 30–80 s. To reproduce: `uv run --project plugins/schema-guard/engine python evals/run_evals.py --runs 3 --model sonnet` (add `--baseline-only` for a free run).
 
-What didn't work at first: the model treated nice-to-haves as blocking questions. The fix was structural (a separate `suggestions` field that can't change the verdict) plus a principle in the skill, not a case-specific patch.
+## Limitations
+- Postgres only. SQL analysis is regex-based: CTE-wrapped DML, `DO $$` blocks, volatile defaults, enum changes and `DROP INDEX` without CONCURRENTLY are not covered.
+- Invariants are only as good as the seed data, and lock judgments are only as good as the `est_rows` values in the policy file.
+- The callers scan is text search within this repo. Callers in other repos or behind dynamic SQL are reported as *unresolved*, never as "none".
+- The hook guards Edit and Write only. Shell edits bypass it, which is why the CI gate exists.
+- A migration can be semantically wrong and still pass every check. Questions, the verifier and human review reduce that risk; they don't remove it.
 
-## Key design decisions
-- **Deterministic verdict floor.** Trust comes from evidence, not from the model's confidence.
-- **"Shipped" = present on the base git ref.** Offline, reproducible, and it needs no production access.
-- **Pluggable adapters, dialects, checks and rules via entry points.** Adding a framework is one file plus a contract-test sample ([docs/adding-a-framework.md](docs/adding-a-framework.md)). Alembic and raw SQL (Flyway-style) ship today, and the skill text never names a framework.
-- **Org knowledge lives in YAML and LEARNINGS, not in the prompt**, so it evolves through normal PRs.
-- **Expand/contract by default.** Only backward-compatible steps are generated; contract steps become follow-up tickets.
-- **No vector DB, no MCP server.** The context needed is small and structured.
-
-## Limitations and failure modes
-- SQL analysis is regex-based and incomplete: CTE-wrapped DML, `DO $$` blocks, volatile defaults, enum changes and `DROP INDEX` without CONCURRENTLY are not covered.
-- Postgres only today. Alembic merge revisions render against their first parent only.
-- Invariants are only as good as the seed data. Table sizes come from the policy file, so stale sizes mean wrong lock judgments.
-- The callers scan is text search. Callers in other repos or via dynamic SQL show up as *unresolved*, never as "none".
-- The hook guards Edit/Write only. Shell edits bypass it, which is one reason the CI gate exists.
-- The LLM can still write a semantically wrong but check-clean migration. The ask-first policy, the verifier subagent and human review reduce this; they don't eliminate it.
-
-## Rolling out to a team
-See [docs/rollout.md](docs/rollout.md):
-- a pinned plugin with stable/next channels;
-- a deterministic CI gate with branch protection (GO never auto-merges);
-- policy and LEARNINGS owned by humans;
-- anonymised production-sampled seed data;
-- evals as the regression gate for any skill or model change;
-- a pinned model with a budget;
-- metrics on verdict mix, overrides and escapes.
-
-## Layout
-```
-.claude-plugin/         marketplace.json
-.github/workflows/      CI: engine tests, deterministic eval baseline, gitleaks
-plugins/schema-guard/   skill, hook, verifier agent, bin/sg, engine/ (Python, tests)
-examples/               acme-mini-org fixture, build_fixture.sh, walkthrough/
-evals/                  cases/, run_evals.py, results/
-docs/                   architecture, adding-a-framework, rollout
-```
-
-## Contributing
-See [CONTRIBUTING.md](CONTRIBUTING.md). Licensed under [MIT](LICENSE).
+## More
+- [docs/rollout.md](docs/rollout.md): rolling it out to a team (versioning, CI, ownership, metrics).
+- [docs/architecture.md](docs/architecture.md): the design and the reasons behind it.
+- [docs/adding-a-framework.md](docs/adding-a-framework.md): how to add a migration framework.
+- [CONTRIBUTING.md](CONTRIBUTING.md) · [MIT license](LICENSE)
