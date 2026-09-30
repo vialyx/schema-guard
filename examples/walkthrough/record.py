@@ -74,9 +74,11 @@ def render(events: list[dict], title: str) -> str:
                     else:
                         lines.append(f"> **{block['name']}**")
                     lines.append("")
-        elif ev.get("type") == "result":
-            lines.append(f"_turns: {ev.get('num_turns')}, cost: ${ev.get('total_cost_usd', 0):.2f}, "
-                         f"time: {ev.get('duration_ms', 0) / 1000:.0f}s_")
+    results = [ev for ev in events if ev.get("type") == "result"]
+    if results:  # subagents emit their own result events; the session's is the last one
+        ev = results[-1]
+        lines.append(f"_turns: {ev.get('num_turns')}, cost: ${ev.get('total_cost_usd', 0):.2f}, "
+                     f"time: {ev.get('duration_ms', 0) / 1000:.0f}s_")
     return "\n".join(lines) + "\n"
 
 
