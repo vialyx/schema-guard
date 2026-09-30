@@ -115,6 +115,8 @@ class Context:
     _db_server: Any = None
 
     service: Any = None  # ServiceConfig from the policy
+    # The change edits schema-guard.yaml; checks use the base branch's version instead.
+    policy_changed: bool = False
 
     @property
     def pending(self) -> list[Migration]:

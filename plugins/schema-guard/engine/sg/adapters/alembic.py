@@ -2,16 +2,15 @@
 
 Listing migrations happens in-process through Alembic's ScriptDirectory, which only
 parses revision files and never executes env.py. Anything that needs env.py
-(offline SQL rendering, upgrade, downgrade) runs in a subprocess: env.py usually
-imports application code, and a separate interpreter keeps ours clean.
+(offline SQL rendering, upgrade, downgrade) runs in a subprocess using the service's
+own Python (env.py usually imports application code), through alembic_runner.py,
+which forces the throwaway database URL and refuses to connect anywhere else.
 """
 
 from __future__ import annotations
 
-import os
 import re
 import subprocess
-import sys
 from pathlib import Path
 
 from sg.adapters.base import MigrationAdapter
@@ -19,6 +18,7 @@ from sg.core.models import Migration
 
 #: URL handed to env.py when rendering offline; nothing ever connects to it.
 OFFLINE_URL = "postgresql+psycopg://offline@localhost/offline"
+RUNNER = Path(__file__).resolve().parent / "alembic_runner.py"
 
 
 class AlembicAdapter(MigrationAdapter):
@@ -73,12 +73,8 @@ class AlembicAdapter(MigrationAdapter):
     # -- subprocess helpers --------------------------------------------------
 
     def _run(self, args: list[str], database_url: str) -> str:
-        env = dict(os.environ)
-        env["DATABASE_URL"] = database_url
-        cmd = [sys.executable, "-m", "alembic", "-c", "alembic.ini", *args]
-        proc = subprocess.run(
-            cmd, cwd=self.service_root, env=env, capture_output=True, text=True
-        )
+        cmd = [*self.python, str(RUNNER), database_url, "-c", "alembic.ini", *args]
+        proc = subprocess.run(cmd, cwd=self.service_root, capture_output=True, text=True)
         if proc.returncode != 0:
             raise RuntimeError(
                 f"alembic {' '.join(args)} failed (exit {proc.returncode}) in "
