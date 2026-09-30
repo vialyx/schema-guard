@@ -1,0 +1,11 @@
+{
+  "name": "schema-guard",
+  "owner": { "name": "schema-guard maintainers" },
+  "plugins": [
+    {
+      "name": "schema-guard",
+      "source": "./plugins/schema-guard",
+      "description": "Safe database schema changes for ledgers, money and inventory tables, with a deterministic GO / NEEDS-HUMAN / REFUSED verdict."
+    }
+  ]
+}

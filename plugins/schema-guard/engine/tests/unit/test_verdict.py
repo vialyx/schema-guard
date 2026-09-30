@@ -62,3 +62,12 @@ def test_build_validates_and_renders(tmp_path: Path):
     assert doc["verdict"] == "REFUSED"
     md = card(doc)
     assert "REFUSED" in md and "use BIGINT cents" in md
+
+
+def test_card_numbers_questions_once_and_handles_no_checks(tmp_path: Path):
+    doc = build([], {"questions": ["1. kg or lb?", "2) one or many?", "NULL meaning?"]},
+                repo_root=tmp_path, migrations=[], tables=[], policy_sources=[])
+    md = card(doc)
+    assert "1. kg or lb?" in md and "2. one or many?" in md and "3. NULL meaning?" in md
+    assert "1. 1." not in md and "2. 2)" not in md
+    assert "| Check |" not in md and "none run yet" in md

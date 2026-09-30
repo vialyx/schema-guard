@@ -37,7 +37,7 @@ claude --plugin-dir /path/to/schema-guard/plugins/schema-guard
 > /schema-guard:safe-schema-change add an optional inspection_notes column to orders
 ```
 
-For a team, install it from the marketplace (`/plugin marketplace add <this repo>`) and enable it per repo in `.claude/settings.json`. The CI gate needs no LLM:
+For a team, install it from the marketplace (`/plugin marketplace add vialyx/schema-guard`, then `/plugin install schema-guard@schema-guard`) and enable it per repo in `.claude/settings.json`. The CI gate needs no LLM:
 
 ```bash
 plugins/schema-guard/bin/sg check && plugins/schema-guard/bin/sg verdict
@@ -123,8 +123,13 @@ See [docs/rollout.md](docs/rollout.md):
 
 ## Layout
 ```
+.claude-plugin/         marketplace.json
+.github/workflows/      CI: engine tests, deterministic eval baseline, gitleaks
 plugins/schema-guard/   skill, hook, verifier agent, bin/sg, engine/ (Python, tests)
 examples/               acme-mini-org fixture, build_fixture.sh, walkthrough/
 evals/                  cases/, run_evals.py, results/
 docs/                   architecture, adding-a-framework, rollout
 ```
+
+## Contributing
+See [CONTRIBUTING.md](CONTRIBUTING.md). Licensed under [MIT](LICENSE).

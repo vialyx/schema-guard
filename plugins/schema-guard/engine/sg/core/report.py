@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 BADGE = {"GO": "🟢 GO", "NEEDS-HUMAN": "🟡 NEEDS-HUMAN", "REFUSED": "🔴 REFUSED"}
@@ -28,7 +29,7 @@ def card(doc: dict[str, Any]) -> str:
 
     if doc["questions"]:
         out.append("\n**Questions for a human (answer, then re-run)**")
-        out += [f"{i}. {q}" for i, q in enumerate(doc["questions"], 1)]
+        out += [f"{i}. {_strip_number(q)}" for i, q in enumerate(doc["questions"], 1)]
 
     if doc.get("tables"):
         out.append("\n**Tables touched**")
@@ -44,9 +45,12 @@ def card(doc: dict[str, Any]) -> str:
         for step in plan.get("contract", []):
             out.append(f"- [contract — follow-up ticket] {step}")
 
-    out.append("\n| Check | Status | Summary |\n|---|---|---|")
-    for c in doc["checks"]:
-        out.append(f"| {c['name']} | {ICON[c['status']]} {c['status']} | {_cell(c.get('summary', ''))} |")
+    if doc["checks"]:
+        out.append("\n| Check | Status | Summary |\n|---|---|---|")
+        for c in doc["checks"]:
+            out.append(f"| {c['name']} | {ICON[c['status']]} {c['status']} | {_cell(c.get('summary', ''))} |")
+    else:
+        out.append("\n**Checks:** none run yet (run `sg check` once a migration exists).")
 
     other = [f for f in doc["findings"] if f["severity"] in ("ask", "warn")]
     if other:
@@ -65,6 +69,14 @@ def card(doc: dict[str, Any]) -> str:
     if doc["files_changed"]:
         out.append("\n<details><summary>Files</summary>\n\n" + "\n".join(f"- `{p}`" for p in doc["files_changed"]) + "\n</details>")
     return "\n".join(out) + "\n"
+
+
+_LEADING_NUMBER = re.compile(r"^\s*(?:\d+[.)]|[-*])\s+")
+
+
+def _strip_number(s: str) -> str:
+    """Drop a list marker the model already put on a question ("1. ", "2) ", "- "); the card numbers them."""
+    return _LEADING_NUMBER.sub("", s, count=1)
 
 
 def _cell(s: str) -> str:

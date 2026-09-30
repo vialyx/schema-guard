@@ -204,7 +204,7 @@
   ],
   "llm_escalated": false,
   "policy_sources": [
-    "/Users/maksimvialykh/Library/Application Support/Claude/scratch-workspaces/2373eecf-f1a9-4218-9226-33794f158cc9/b6cf10f0-5386-4f06-889f-3756b5c72a79/scratch-2026-09-29-2bba07/schema-guard/plugins/schema-guard/engine/sg/defaults.yaml",
-    "/private/var/folders/vs/520w5bhd1qn25ndtsmhg2zwh0000gn/T/sg-walkthrough-y3vjonoy/repo/schema-guard.yaml"
+    "/opt/schema-guard/plugins/schema-guard/engine/sg/defaults.yaml",
+    "/tmp/sg-walkthrough/repo/schema-guard.yaml"
   ]
 }

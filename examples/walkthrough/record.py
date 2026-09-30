@@ -37,12 +37,22 @@ TURN2 = (
 TOOLS = ["Bash(sg:*)", "Bash(git:*)", "Bash(ls:*)", "Read", "Grep", "Glob", "Edit", "Write", "Task"]
 
 
+def scrub(text: str, work: Path) -> str:
+    """Replace machine-specific paths (temp dir, checkout, home) so recordings are safe to commit."""
+    for real, fake in ((work.resolve(), "/tmp/sg-walkthrough"), (work, "/tmp/sg-walkthrough"),
+                       (ROOT, "/opt/schema-guard"), (Path.home(), "/home/user")):
+        text = text.replace(str(real), fake)
+        text = text.replace(str(real).replace("/", "-"), fake.replace("/", "-"))  # ~/.claude/projects slugs
+    return text
+
+
 def run_turn(prompt: str, repo: Path, model: str, resume: str | None) -> list[dict]:
     cmd = ["claude", "-p", prompt, "--plugin-dir", str(PLUGIN), "--output-format", "stream-json", "--verbose",
            "--permission-mode", "acceptEdits", "--max-turns", "60", "--model", model, "--allowedTools", *TOOLS]
     if resume:
         cmd += ["--resume", resume]
     out = subprocess.run(cmd, cwd=repo, capture_output=True, text=True, timeout=1800).stdout
+    out = scrub(out, repo.parent)
     return [json.loads(line) for line in out.splitlines() if line.strip().startswith("{")]
 
 
@@ -80,17 +90,17 @@ def main() -> None:
 
     t1 = run_turn(TURN1, repo, args.model, None)
     (HERE / "turn1.jsonl").write_text("\n".join(json.dumps(e) for e in t1) + "\n")
-    shutil.copy(repo / ".schema-guard" / "card.md", HERE / "card-turn1.md")
+    (HERE / "card-turn1.md").write_text(scrub((repo / ".schema-guard" / "card.md").read_text(), work))
     session = next(e["session_id"] for e in t1 if e.get("session_id"))
 
     t2 = run_turn(TURN2, repo, args.model, session)
     (HERE / "turn2.jsonl").write_text("\n".join(json.dumps(e) for e in t2) + "\n")
-    shutil.copy(repo / ".schema-guard" / "card.md", HERE / "card-turn2.md")
-    shutil.copy(repo / ".schema-guard" / "verdict.json", HERE / "verdict.json")
+    (HERE / "card-turn2.md").write_text(scrub((repo / ".schema-guard" / "card.md").read_text(), work))
+    (HERE / "verdict.json").write_text(scrub((repo / ".schema-guard" / "verdict.json").read_text(), work))
 
     subprocess.run(["git", "add", "-A", "--", ".", ":(exclude).schema-guard"], cwd=repo, check=True)
     diff = subprocess.run(["git", "diff", "--cached"], cwd=repo, capture_output=True, text=True).stdout
-    (HERE / "changes.diff").write_text(diff)
+    (HERE / "changes.diff").write_text(scrub(diff, work))
 
     transcript = "# Walkthrough transcript\n\n" + render(t1, f"Turn 1 — engineer: “{TURN1.split(' ', 1)[1]}”") \
         + "\n" + render(t2, f"Turn 2 — engineer: “{TURN2}”")
