@@ -1,0 +1,62 @@
+[
+  {
+    "verdict": "GO",
+    "ok": true,
+    "problems": [],
+    "rules": [
+      "squawk:require-lock-timeout",
+      "squawk:require-statement-timeout"
+    ],
+    "new_migrations": [],
+    "case": "trap-new-table-review",
+    "kind": "baseline"
+  },
+  {
+    "verdict": "GO",
+    "ok": true,
+    "problems": [],
+    "rules": [
+      "squawk:require-lock-timeout",
+      "squawk:require-statement-timeout"
+    ],
+    "new_migrations": [],
+    "case": "trap-new-table-review",
+    "kind": "skill",
+    "cost_usd": 0.2013322,
+    "turns": 7,
+    "seconds": 32.6,
+    "final_message": "* Migration 0005 is a new table only. It changes nothing that already exists, so it is safe to ship ahead of the code.\n\n- **Checks:**\n  - Policy, callers, up\u2192down\u2192up round-trip, invariants and tests (6 passed) all pass.\n  - Types follow the conventions: `NUMERIC(14,3)` for kg and `BIGINT` cents for money.\n  - The `legacy-sync` dynamic SQL touches `orders`, but 0005 doesn't change `orders`, so it isn't affected.\n- **Warnings:** squawk flags the missing `lock_timeout` and `statement_timeout`. The foreign key to `orders` briefly locks that table. Add `op.execute(\"SET lock_timeout = '3s'\")` at the top of `upgrade()` to clear both. I didn't edit your file.\n- **Follow-up PR, not blocking:**\n  - Decide how `credit_amount_cents` reaches `ledger_entries`. It has to be new or reversing entries, never an UPDATE.\n  - Consider a `credit_amount_cents >= 0` CHECK.\n  - Treat adjustment rows as append-only.\n- **Reviewer:** @acme/data-platform.\n\nI proposed no `LEARNINGS.md` change. I didn't run the optional `migration-verifier` second opinion, so the verdict rests on `sg check` and my own read of the migration. I ran `sg verdict`, which wrote `.schema-guard/llm.json` and `.schema-guard/checks.json`."
+  },
+  {
+    "verdict": "GO",
+    "ok": true,
+    "problems": [],
+    "rules": [
+      "squawk:require-lock-timeout",
+      "squawk:require-statement-timeout"
+    ],
+    "new_migrations": [],
+    "case": "trap-new-table-review",
+    "kind": "skill",
+    "cost_usd": 0.20646619999999996,
+    "turns": 7,
+    "seconds": 32.7,
+    "final_message": "**Verdict: GO.** Migration 0005 is safe to open as a PR. I didn't change it, and `sg verdict` has been run.\n\n- **What it does:** it creates `order_weight_adjustments` with an FK to `orders`. Weights are `NUMERIC(14,3)` kg and money is `BIGINT` cents, as policy requires, and there are no floats. The downgrade drops the index and table, and the up\u2192down\u2192up round-trip passed.\n- **Checks:** policy, callers, round-trip, invariants and tests (6 passed) all pass. Squawk gives two warnings: no `lock_timeout` and no `statement_timeout`. They are non-blocking.\n- **Suggestion before merging:** add `SET lock_timeout = '3s'` and a `statement_timeout` at the top of `upgrade()`. The FK briefly locks `orders`, and this clears both warnings.\n- **Other suggestions:**\n  - Consider `CHECK (credit_amount_cents >= 0)` or document the sign convention.\n  - In the follow-up PR that writes adjustments, decide whether adjustment rows are immutable, and how credits reach `ledger_entries` (new entries only, never UPDATE).\n  - Tell `@acme/integrations` if `net_weight_kg` semantics change.\n- **Reviewer:** `@acme/data-platform`.\n\nNo `LEARNINGS.md` addition proposed."
+  },
+  {
+    "verdict": "GO",
+    "ok": true,
+    "problems": [],
+    "rules": [
+      "squawk:require-lock-timeout",
+      "squawk:require-statement-timeout"
+    ],
+    "new_migrations": [],
+    "case": "trap-new-table-review",
+    "kind": "skill",
+    "cost_usd": 0.2068854,
+    "turns": 7,
+    "seconds": 33.0,
+    "final_message": "**Verdict: GO.** `sg verdict` ran and the migration is safe to open as a PR. I didn't edit it.\n\n- **What it does:** migration 0005 adds a new table, `order_weight_adjustments`, with a foreign key to `orders` and an index on `order_id`. It doesn't touch any existing table. Weights are `NUMERIC(14,3)` kg and money is `BIGINT` cents, as the conventions require. The `downgrade()` is exact.\n- **Checks:** policy, callers, up\u2192down\u2192up round-trip, invariants and the 6 service tests all pass. Squawk gives two warnings, for a missing `lock_timeout` and `statement_timeout`.\n- **Suggested before merge:** add `SET lock_timeout = '3s'` (and a `statement_timeout`) at the top of `upgrade()`. The foreign key briefly locks `orders`, and this silences both warnings.\n- **Follow-up PR:**\n  - Decide how adjustments reach `ledger_entries`: reversing entries only, never UPDATE of posted rows.\n  - Consider a `CHECK (credit_amount_cents >= 0)` to match the existing check on `deduction_kg`.\n  - Add a model and tests for the table.\n- **Reviewer:** @acme/data-platform.\n\nNo `LEARNINGS.md` addition is needed, since nothing came up that the org will need again."
+  }
+]

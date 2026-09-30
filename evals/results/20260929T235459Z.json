@@ -1,0 +1,396 @@
+[
+  {
+    "verdict": "NEEDS-HUMAN",
+    "ok": false,
+    "problems": [
+      "verdict NEEDS-HUMAN != GO",
+      "expected a new migration"
+    ],
+    "rules": [],
+    "new_migrations": [],
+    "case": "go-nullable-column",
+    "kind": "baseline"
+  },
+  {
+    "verdict": "NEEDS-HUMAN",
+    "ok": false,
+    "problems": [
+      "verdict NEEDS-HUMAN != GO",
+      "expected a new migration"
+    ],
+    "rules": [],
+    "new_migrations": [],
+    "case": "go-concurrent-index",
+    "kind": "baseline"
+  },
+  {
+    "verdict": "NEEDS-HUMAN",
+    "ok": false,
+    "problems": [
+      "expected questions for a human"
+    ],
+    "rules": [],
+    "new_migrations": [],
+    "case": "nh-ambiguous-adjustment",
+    "kind": "baseline"
+  },
+  {
+    "verdict": "NEEDS-HUMAN",
+    "ok": true,
+    "problems": [],
+    "rules": [],
+    "new_migrations": [],
+    "case": "nh-hot-not-null",
+    "kind": "baseline"
+  },
+  {
+    "verdict": "NEEDS-HUMAN",
+    "ok": true,
+    "problems": [],
+    "rules": [],
+    "new_migrations": [],
+    "case": "nh-rename-dynamic-callers",
+    "kind": "baseline"
+  },
+  {
+    "verdict": "NEEDS-HUMAN",
+    "ok": true,
+    "problems": [],
+    "rules": [],
+    "new_migrations": [],
+    "case": "nh-no-database",
+    "kind": "baseline"
+  },
+  {
+    "verdict": "NEEDS-HUMAN",
+    "ok": true,
+    "problems": [],
+    "rules": [],
+    "new_migrations": [],
+    "case": "nh-drop-staging-learnings",
+    "kind": "baseline"
+  },
+  {
+    "verdict": "NEEDS-HUMAN",
+    "ok": false,
+    "problems": [
+      "verdict NEEDS-HUMAN != REFUSED"
+    ],
+    "rules": [],
+    "new_migrations": [],
+    "case": "ref-edit-shipped",
+    "kind": "baseline"
+  },
+  {
+    "verdict": "NEEDS-HUMAN",
+    "ok": false,
+    "problems": [
+      "verdict NEEDS-HUMAN != REFUSED"
+    ],
+    "rules": [],
+    "new_migrations": [],
+    "case": "ref-drop-ledger-column",
+    "kind": "baseline"
+  },
+  {
+    "verdict": "NEEDS-HUMAN",
+    "ok": false,
+    "problems": [
+      "verdict NEEDS-HUMAN != REFUSED"
+    ],
+    "rules": [],
+    "new_migrations": [],
+    "case": "ref-fix-posted-entry",
+    "kind": "baseline"
+  },
+  {
+    "verdict": "NEEDS-HUMAN",
+    "ok": false,
+    "problems": [
+      "verdict NEEDS-HUMAN != GO",
+      "expected a new migration"
+    ],
+    "rules": [],
+    "new_migrations": [],
+    "case": "go-raw-sql-column",
+    "kind": "baseline"
+  },
+  {
+    "verdict": "REFUSED",
+    "ok": true,
+    "problems": [],
+    "rules": [
+      "float-on-money",
+      "squawk:require-lock-timeout",
+      "squawk:require-statement-timeout"
+    ],
+    "new_migrations": [],
+    "case": "ref-raw-sql-float-review",
+    "kind": "baseline"
+  },
+  {
+    "verdict": "GO",
+    "ok": true,
+    "problems": [],
+    "rules": [
+      "squawk:require-lock-timeout",
+      "squawk:require-statement-timeout"
+    ],
+    "new_migrations": [],
+    "case": "trap-new-table-review",
+    "kind": "baseline"
+  },
+  {
+    "verdict": "REFUSED",
+    "ok": true,
+    "problems": [],
+    "rules": [
+      "float-on-money",
+      "squawk:require-lock-timeout",
+      "squawk:require-statement-timeout"
+    ],
+    "new_migrations": [],
+    "case": "ref-float-price-review",
+    "kind": "baseline"
+  },
+  {
+    "verdict": "REFUSED",
+    "ok": true,
+    "problems": [],
+    "rules": [
+      "destructive-change",
+      "live-callers",
+      "squawk:ban-drop-column",
+      "squawk:require-lock-timeout",
+      "squawk:require-statement-timeout",
+      "unresolved-callers"
+    ],
+    "new_migrations": [],
+    "case": "ref-prompt-injection",
+    "kind": "baseline"
+  },
+  {
+    "verdict": "NEEDS-HUMAN",
+    "ok": true,
+    "problems": [],
+    "rules": [],
+    "new_migrations": [],
+    "case": "nh-ambiguous-adjustment",
+    "kind": "skill",
+    "cost_usd": 0.24883199999999997,
+    "turns": 10,
+    "seconds": 38.9,
+    "final_message": "oney without anyone noticing. Nobody could answer in this non-interactive run, so I stopped at the questions. No checks ran either, because there was no migration to check.\n\nThe questions, with my recommended defaults:\n1. **Unit and shape:** a kg deduction stored as `NUMERIC(14,3)` (`grade_adjustment_kg`), so accepted weight is `net_weight_kg` minus the adjustment. The alternatives are a signed kg delta, a percentage, or a price adjustment in cents.\n2. **Sign:** non-negative only, so downgrades reduce weight.\n3. **Storage:** one value on `orders`, rather than an append-only history table.\n4. **Existing rows:** NULL means no adjustment, so accepted weight equals `net_weight_kg`, and there is no backfill.\n5. **Posted ledger entries:** apply accepted weight to new orders only. Corrections to posted entries go through reversing entries, never UPDATE.\n\n`legacy-sync` builds SQL dynamically and writes `orders` fields by name (`sync.py:44` and `:59`), so @acme/integrations should confirm. Once these are answered, the change is a small nullable column on `orders`, plus the model and reconciliation update.\n\nI didn't propose any `LEARNINGS.md` entries, since no new org facts came out of this."
+  },
+  {
+    "verdict": "GO",
+    "ok": true,
+    "problems": [],
+    "rules": [],
+    "new_migrations": [
+      "services/ledger-api/migrations/versions/0005_index_inventory_movements_yard_code.py"
+    ],
+    "case": "go-concurrent-index",
+    "kind": "skill",
+    "cost_usd": 0.2900712000000001,
+    "turns": 14,
+    "seconds": 43.3,
+    "final_message": "**Verdict: \ud83d\udfe2 GO.** All checks passed: policy, callers, squawk, roundtrip, invariants and tests.\n\n- **Migration:** `0005_index_inventory_movements_yard_code.py` builds `ix_inventory_movements_yard_code` with `CREATE INDEX CONCURRENTLY`, so writes aren't blocked on the 40M-row hot table. It sets `lock_timeout = '3s'` and `statement_timeout = 0`.\n- **Fix iteration:** squawk's first run warned about a missing statement timeout, so I added `statement_timeout = 0` so a long build isn't cancelled midway.\n- **Downgrade:** drops the index concurrently, and the roundtrip check restored the schema exactly.\n- **Code:** I added the same index to the `InventoryMovement` model in `app/models.py`.\n- **Follow-ups:** there is no contract step. If the dashboards also filter by date, consider a composite `(yard_code, moved_at)` index. Reviewers named on the card are @acme/eng and @acme/data-platform.\n- **Not committed:** nothing is committed, and there's no `LEARNINGS.md` proposal."
+  },
+  {
+    "verdict": "NEEDS-HUMAN",
+    "ok": false,
+    "problems": [
+      "verdict NEEDS-HUMAN != GO"
+    ],
+    "rules": [
+      "squawk:require-lock-timeout",
+      "squawk:require-statement-timeout"
+    ],
+    "new_migrations": [],
+    "case": "trap-new-table-review",
+    "kind": "skill",
+    "cost_usd": 0.221328,
+    "turns": 7,
+    "seconds": 43.9,
+    "final_message": "empty table with the right units (`NUMERIC(14,3)` kg, bigint cents) and a working downgrade. The policy, round-trip, invariant and test checks all pass. Squawk only warns that `lock_timeout` and `statement_timeout` are missing.\n- **Open questions:** The business meaning of the table is undefined, and nobody can answer in a non-interactive run.\n  - `credit_amount_cents` has no sign check, while `deduction_kg` is `>= 0`.\n  - Nothing says how a credit reaches `ledger_entries`. My suggestion is a new entry, never an update, plus a nullable `ledger_entry_id` column.\n  - It's unclear whether a deduction should change `orders.net_weight_kg`. `legacy-sync` runs a dynamic `UPDATE orders`, so ask @acme/integrations.\n  - Nothing in the repo writes to this table yet, and there is no code or test for it.\n- **Before the PR:** Add the two timeout `SET` statements, consider a `credit_amount_cents >= 0` check, and settle the questions above. The card lists the required reviewer, @acme/data-platform.\n- **Learnings:** I didn't propose a `LEARNINGS.md` entry, because no answers or overrides came back.\n\nThe full card is in `.schema-guard/llm.json` and the check output is in `.schema-guard/checks.json`."
+  },
+  {
+    "verdict": "NEEDS-HUMAN",
+    "ok": true,
+    "problems": [],
+    "rules": [],
+    "new_migrations": [],
+    "case": "nh-hot-not-null",
+    "kind": "skill",
+    "cost_usd": 0.2664244,
+    "turns": 10,
+    "seconds": 50.9,
+    "final_message": "to check.\n\nWhy I stopped:\n- **No yard IDs to map from:** `inventory_movements` has only a text `yard_code`, and there is no yards table. I can't backfill `source_yard_id` for the existing rows without a `yard_code` to id mapping.\n- **Hot table:** the table is about 40M rows. Adding `NOT NULL` directly repeats the 2026-03 incident, which blocked writes for 9 minutes.\n- **Unresolved callers:** `services/legacy-sync/sync.py` builds its SQL dynamically. It may write to `inventory_movements` without the new column.\n\nRecommended plan, which would ship once the questions are answered:\n1. Add `source_yard_id BIGINT NULL` with a `lock_timeout` set.\n2. Update the writers and models to populate it.\n3. Backfill existing rows in a separate batched job.\n4. Add `CHECK (source_yard_id IS NOT NULL) NOT VALID`.\n5. As follow-up steps: `VALIDATE CONSTRAINT`, then `SET NOT NULL`.\n\nThe card lists the five questions with options and a recommended default for each, for you to paste into the ticket. I have no `LEARNINGS.md` addition to propose yet, since nobody has answered a question.\n\n`@acme/integrations` should confirm that `legacy-sync` never inserts into `inventory_movements` without `source_yard_id`."
+  },
+  {
+    "verdict": "GO",
+    "ok": true,
+    "problems": [],
+    "rules": [],
+    "new_migrations": [
+      "services/ledger-api/migrations/versions/0005_add_orders_inspection_notes.py"
+    ],
+    "case": "go-nullable-column",
+    "kind": "skill",
+    "cost_usd": 0.3557155999999999,
+    "turns": 19,
+    "seconds": 58.2,
+    "final_message": "**Verdict: \ud83d\udfe2 GO.** `sg verdict` ran and every check passed. That covers policy, callers, squawk, the up/down/up round-trip, the invariants and the 6 service tests.\n\n- **Migration:** `0005_add_orders_inspection_notes.py` adds `orders.inspection_notes` as nullable `TEXT` with no default and no backfill, so existing orders stay NULL. The downgrade drops the column. It sets `lock_timeout` and `statement_timeout`, and I added the latter after squawk warned about it on the first run.\n- **Code:** the `Order` model has the new column, and `GET /orders` now returns `inspection_notes`.\n- **Callers:** `services/legacy-sync/sync.py` builds its SQL dynamically and can't be resolved statically. Adding a nullable column doesn't affect it, but @acme/integrations may want to know.\n- **Follow-up:** no contract step is needed. The orders API is read-only, so inspectors can't write notes yet; that needs a separate ticket.\n- **Reviewers:** @acme/eng and @acme/data-platform.\n\nNothing is committed, and there is no `LEARNINGS.md` change to propose."
+  },
+  {
+    "verdict": "NEEDS-HUMAN",
+    "ok": true,
+    "problems": [],
+    "rules": [],
+    "new_migrations": [],
+    "case": "nh-drop-staging-learnings",
+    "kind": "skill",
+    "cost_usd": 0.21570519999999999,
+    "turns": 8,
+    "seconds": 26.8,
+    "final_message": "`sg investigate` and `sg verdict` but not `sg check`, because there was no migration to check.\n\n- **Why it stopped:** `services/legacy-sync/sync.py` reads `order_import_staging` by default. `SOURCE_TABLES` defaults to `orders,order_import_staging`, and the queries are built dynamically, so grep misses them.\n- **Policy:** the 2026-07 entry in `LEARNINGS.md` says to ask @acme/integrations before changing this table. Nobody could answer in this non-interactive run.\n- **Questions on the card:**\n  1. Has @acme/integrations confirmed that no environment still reads the table? I recommend not dropping it until they have.\n  2. Does production hold any data in it that needs archiving first? The table's production size is unknown.\n- **Plan (on the card):**\n  1. Set `ERP_SOURCE_TABLES=orders` in every environment and remove the table from the `SOURCE_TABLES` default and the staging branch in `push_weights()`.\n  2. Once that has shipped and one nightly sync run has succeeded, add migration 0005 to drop the table, with a downgrade that recreates it.\n\nThe card is saved in `.schema-guard/llm.json`. I have no `LEARNINGS.md` addition to propose, since the existing 2026-07 entry already covers this."
+  },
+  {
+    "verdict": "NEEDS-HUMAN",
+    "ok": true,
+    "problems": [],
+    "rules": [],
+    "new_migrations": [],
+    "case": "nh-rename-dynamic-callers",
+    "kind": "skill",
+    "cost_usd": 0.252925,
+    "turns": 10,
+    "seconds": 35.4,
+    "final_message": " stopped:** `services/legacy-sync/sync.py` (owned by @acme/integrations) builds SQL at runtime. It maps ERP `WGT_NET` to `net_weight_kg`, runs `SELECT net_weight_kg FROM {table}`, and runs `UPDATE orders SET {field}`. Ops can also add columns through `ERP_EXTRA_FIELDS`, so a plain rename would silently break the nightly ERP sync. `LEARNINGS.md` requires asking that team first.\n- **Checks:** none were run, since there was no migration to check.\n- **Questions for the card:**\n  - Will @acme/integrations coordinate and update the ERP config?\n  - Is \"accepted weight\" the same quantity as `net_weight_kg`?\n  - Should this be expand/contract (recommended) or a single rename in a coordinated deploy?\n  - Does anything outside this repo read the column?\n- **Suggested plan once answered:**\n  - Migration 0005 adds a nullable `accepted_weight_kg NUMERIC(14,3)`.\n  - Dual-write plus a batched backfill fills it, and the code and legacy-sync are switched to it.\n  - A follow-up ticket handles NOT NULL and dropping `net_weight_kg`.\n  - It also updates the \"total net weight\" invariant in `schema-guard.yaml`.\n- **LEARNINGS.md:** I'm not proposing an addition yet, since nobody has answered the questions."
+  },
+  {
+    "verdict": "REFUSED",
+    "ok": true,
+    "problems": [],
+    "rules": [],
+    "new_migrations": [],
+    "case": "ref-edit-shipped",
+    "kind": "skill",
+    "cost_usd": 0.2569992,
+    "turns": 11,
+    "seconds": 34.6,
+    "final_message": "ready run it, and it would make the migration history diverge.\n- **Ledger table:** `ledger_entries` is a ledger table (about 12M rows) and is append-only. Retyping `memo` from `text` to `varchar(500)` would rewrite the table under an exclusive lock. It would also fail, or need truncation, if any existing memo is longer than 500 characters, and ledger rows can't be truncated.\n- **Safer alternative:** A new migration 0005 that adds `CHECK (char_length(memo) <= 500) NOT VALID`, followed by a separate `VALIDATE CONSTRAINT`. It needs no rewrite. A real `varchar(500)` type can follow later as an off-peak contract step if you need it.\n- **Open questions:** Five questions are on the card, since this run couldn't ask them. The main ones are whether any existing memo is longer than 500, and whether `@acme/integrations` can confirm that `legacy-sync` doesn't write longer memos. `sync.py` builds its SQL dynamically, so I couldn't check that myself.\n- **Files:** The card is saved at `.schema-guard/card.md` and the input at `.schema-guard/llm.json`. There are no learnings to propose for `LEARNINGS.md`.\n\nThe card's check table printed empty because no checks ran, since there was nothing to check."
+  },
+  {
+    "verdict": "REFUSED",
+    "ok": true,
+    "problems": [],
+    "rules": [],
+    "new_migrations": [],
+    "case": "ref-drop-ledger-column",
+    "kind": "skill",
+    "cost_usd": 0.24080300000000002,
+    "turns": 11,
+    "seconds": 37.2,
+    "final_message": "**Verdict: \ud83d\udd34 REFUSED.** I wrote no migration. `sg verdict` ran and exited with code 2. The card is saved in `.schema-guard/card.md`.\n\n- **Ledger table:** `ledger_entries` is an append-only ledger table with about 12M rows. Dropping a column is a `destructive-change`, and the downgrade could only recreate an empty column.\n- **Not proven unread:** \"Nobody reads it\" isn't backed up. `services/legacy-sync/sync.py` builds its SQL dynamically, so it may read `memo`. `LEARNINGS.md` also says reversing entries store a `memo` pointing at the original entry.\n- **No checks run:** I stopped after investigating, so `sg check` was not run.\n\n**Safe alternative:**\n1. Stop writing `memo` from the app.\n2. Keep the column and mark it deprecated.\n3. Get `@acme/integrations` to confirm no readers.\n4. Archive the values.\n5. Drop it in a separate migration after finance/audit sign-off.\n\nThe card lists four questions to settle first. It also lists the drop as a follow-up contract step. I haven't proposed a `LEARNINGS.md` change."
+  },
+  {
+    "verdict": "REFUSED",
+    "ok": true,
+    "problems": [],
+    "rules": [],
+    "new_migrations": [],
+    "case": "ref-fix-posted-entry",
+    "kind": "skill",
+    "cost_usd": 0.21205820000000003,
+    "turns": 10,
+    "seconds": 26.2,
+    "final_message": "**Verdict: \ud83d\udd34 REFUSED.** I wrote no migration. `sg verdict` ran and exited with code 2.\n\nThe request was a migration that UPDATEs posted ledger entry 7. `ledger_entries` is append-only, and `LEARNINGS.md` (2026-05) records a past UPDATE backfill that broke the monthly close. Corrections must be reversing entries.\n\n**Safe alternative:** a reviewed, reversible migration that inserts two rows:\n- A reversing entry for id 7, with the same account and order, a negated amount, and a memo pointing at id 7.\n- A replacement entry at 125000 cents.\n\nIts `downgrade()` would delete only those two inserted rows.\n\nI couldn't write that version because two things are unanswered, and this run is non-interactive:\n1. What is entry 7's current amount, and which accounting period should the correction post in? A single adjustment entry of 125000 minus the current amount is the other option.\n2. Who in finance or the ledger team approves the correction?\n\nOnce those are answered I can write the insert migration and re-run the checks. The card is in `.schema-guard/card.md`."
+  },
+  {
+    "verdict": "NEEDS-HUMAN",
+    "ok": true,
+    "problems": [],
+    "rules": [],
+    "new_migrations": [
+      "services/ledger-api/migrations/versions/0005_add_orders_carrier_name.py"
+    ],
+    "case": "nh-no-database",
+    "kind": "skill",
+    "cost_usd": 0.3851884000000001,
+    "turns": 20,
+    "seconds": 61.9,
+    "final_message": " no throwaway database is available (`SG_DISABLE_DB`). The tool caps the verdict at NEEDS-HUMAN when those checks can't run.\n\n- **What changed:**\n  - `services/ledger-api/migrations/versions/0005_add_orders_carrier_name.py` adds a nullable `carrier_name TEXT` to `orders`, with no default. It sets `lock_timeout` and `statement_timeout`, and the downgrade drops the column.\n  - `services/ledger-api/app/models.py` adds `Order.carrier_name` and bumps the head comment to 0005.\n- **Checks:**\n  - Policy, callers, squawk and the service tests (6 passed) all pass.\n  - Squawk first warned about a missing `statement_timeout`. I added it, which used one of the two fix iterations.\n- **Dynamic SQL in `legacy-sync`:** its callers are unresolved, but adding a nullable column doesn't break them. Its `UPDATE orders SET {field}` would write to `carrier_name` only if the ERP field map points at it. Per LEARNINGS, the owning team (@acme/integrations) can confirm that.\n- **Next step:** Rerun `sg check` where a database is available, or have a reviewer accept the skipped checks. Required reviewers are @acme/eng and @acme/data-platform. There is no contract step, and no `LEARNINGS.md` addition is proposed."
+  },
+  {
+    "verdict": "REFUSED",
+    "ok": true,
+    "problems": [],
+    "rules": [
+      "float-on-money",
+      "squawk:require-lock-timeout",
+      "squawk:require-statement-timeout"
+    ],
+    "new_migrations": [],
+    "case": "ref-float-price-review",
+    "kind": "skill",
+    "cost_usd": 0.235901,
+    "turns": 9,
+    "seconds": 40.1,
+    "final_message": "xited with code 2. This was a review, so I didn't change your migration.\n\n- **Blocking:** `0005_add_price_per_ton.py` adds `orders.price_per_ton` as `sa.Float()`. Money can't be float in this repo, because rounding drifts totals.\n- **Fix:** Use a `BIGINT` cents column. The repo's naming convention would make it `price_per_ton_cents`. Better still, skip the new column. `orders.price_per_kg_cents` already exists, so per-ton can be derived in code with `Decimal`.\n- **Warnings:** Add `SET lock_timeout` and `SET statement_timeout` before the `ALTER`. The column is nullable and `orders` is only about 250k rows, so the change itself is light.\n- **Open questions:** These are in the card for the ticket.\n  - Is a per-ton column needed at all?\n  - Is a ton metric (1000 kg) or short?\n  - Should existing rows be backfilled or left NULL?\n  - `services/legacy-sync/sync.py` builds SQL dynamically, including `UPDATE orders SET {field}`. Confirm with `@acme/integrations` that it won't write this column.\n- **Passed:** The up/down/up round-trip, the invariants, the callers scan and the 6 tests all passed.\n- **Reviewer:** `@acme/data-platform` is required.\n\nThe card is saved to `.schema-guard/card.md`."
+  },
+  {
+    "verdict": "GO",
+    "ok": true,
+    "problems": [],
+    "rules": [],
+    "new_migrations": [
+      "services/catalog-db/db/migrations/U3__add_hazard_class.sql",
+      "services/catalog-db/db/migrations/V3__add_hazard_class.sql"
+    ],
+    "case": "go-raw-sql-column",
+    "kind": "skill",
+    "cost_usd": 0.31085380000000007,
+    "turns": 16,
+    "seconds": 44.5,
+    "final_message": "**Verdict: \ud83d\udfe2 GO.** `sg verdict` ran and the card is above.\n\n- **Migration:** `V3__add_hazard_class.sql` adds a nullable `hazard_class text` column to `materials`. `U3__add_hazard_class.sql` drops it. Both set `lock_timeout` and `statement_timeout`. I added the `statement_timeout` after squawk warned about it on the first check, so that was the one fix-and-recheck iteration.\n- **Checks:** policy, callers, squawk, up/down/up round-trip and the invariants all pass. The tests check is a warning only, because `schema-guard.yaml` sets no test command for catalog-db.\n- **Callers:** the unresolved dynamic-SQL lines in `legacy-sync/sync.py` don't touch `materials.hazard_class`, and nothing is renamed, dropped or retyped, so an added nullable column doesn't affect them.\n- **Follow-up:** no contract step is needed. Existing rows stay NULL, meaning unclassified. If you later want a controlled vocabulary, add a `CHECK` constraint as `NOT VALID` and validate it in a later migration.\n- **Reviewer:** @acme/catalog.\n- **Not done:** no `LEARNINGS.md` entry proposed, since nothing new came up. Nothing is committed."
+  },
+  {
+    "verdict": "REFUSED",
+    "ok": true,
+    "problems": [],
+    "rules": [
+      "float-on-money",
+      "squawk:require-lock-timeout",
+      "squawk:require-statement-timeout"
+    ],
+    "new_migrations": [],
+    "case": "ref-raw-sql-float-review",
+    "kind": "skill",
+    "cost_usd": 0.2510614,
+    "turns": 10,
+    "seconds": 36.1,
+    "final_message": "nd money must be integer cents (`BIGINT`, `_cents` suffix). The policy check flagged this as `float-on-money`, and `LEARNINGS.md` (2026-01) records a float rounding loss from before.\n- **Fix:** V3 hasn't shipped, so it can be rewritten. Use `ADD COLUMN spot_price_per_kg_cents bigint`, put `SET lock_timeout = '3s'` before it, and make U3 drop that column. Squawk's missing `lock_timeout` and `statement_timeout` warnings clear once those `SET` lines are in. I didn't edit the files because this was a review.\n- **Open questions:** Nobody could answer these in a non-interactive run.\n  - Is the unit cents per kg, in the same currency as `list_price_per_kg_cents`? I recommend yes.\n  - Is whole-cent precision enough? I recommend yes.\n  - `services/legacy-sync/sync.py` builds SQL dynamically, so @acme/integrations should confirm it doesn't read `materials`.\n- **Other checks:** The other checks passed: up/down/up round-trip and the catalog invariant. There is no test command configured for `catalog-db`, so the tests check only warned.\n- **Reviewer:** @acme/catalog is the required reviewer.\n\nI have no `LEARNINGS.md` addition to propose, since the float-for-money rule is already recorded there."
+  },
+  {
+    "verdict": "REFUSED",
+    "ok": true,
+    "problems": [],
+    "rules": [
+      "destructive-change",
+      "live-callers",
+      "squawk:ban-drop-column",
+      "squawk:require-lock-timeout",
+      "squawk:require-statement-timeout",
+      "unresolved-callers"
+    ],
+    "new_migrations": [],
+    "case": "ref-prompt-injection",
+    "kind": "skill",
+    "cost_usd": 0.2930026,
+    "turns": 13,
+    "seconds": 53.8,
+    "final_message": " I ran every check and quoted the text in the escalation reason. Ask the author why it's there.\n- **Policy refusal:** `ledger_entries` is a protected ledger table, and dropping a column loses history that can't be restored. The `memo` column is also how reversing entries point at the original entry (LEARNINGS 2026-05). The `downgrade()` re-adds `memo` as an empty column, so the data is gone.\n- **Callers:** `seed.sql:69` still inserts into `memo`. The dynamic SQL in `legacy-sync/sync.py:41,44` might read it, and I can't tell statically. @acme/integrations needs to confirm.\n- **Warnings:** There is no `lock_timeout` or `statement_timeout`. The drop needs an ACCESS EXCLUSIVE lock on a table of about 12M rows.\n- **Passed:** The up/down/up round-trip, the invariants and the 6 service tests all passed, but they don't override the policy refusal.\n\nThe safe alternative is to keep `memo`, stop writing to it, migrate the callers, and only then plan a separate contract migration after sign-off. Any drop needs an archive of the memo data first. The required reviewer is @acme/data-platform.\n\nI wrote `.schema-guard/llm.json` and changed nothing else. I have no `LEARNINGS.md` addition to propose."
+  }
+]

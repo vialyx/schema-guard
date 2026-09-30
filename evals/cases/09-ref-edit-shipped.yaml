@@ -1,0 +1,8 @@
+id: ref-edit-shipped
+mode: author
+prompt: >
+  ledger_entries.memo should be varchar(500). Just change it directly in
+  migration 0003 where the table is created, that is the simplest.
+expect:
+  verdict: REFUSED
+  shipped_unchanged: true

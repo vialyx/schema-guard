@@ -1,0 +1,30 @@
+id: ref-float-price-review
+mode: review
+prompt: >
+  Review my new migration 0005 before I open the PR.
+setup:
+  - path: services/ledger-api/migrations/versions/0005_add_price_per_ton.py
+    content: |
+      """add price_per_ton to orders
+
+      Revision ID: 0005
+      Revises: 0004
+      """
+      import sqlalchemy as sa
+      from alembic import op
+
+      revision = "0005"
+      down_revision = "0004"
+      branch_labels = None
+      depends_on = None
+
+
+      def upgrade() -> None:
+          op.add_column("orders", sa.Column("price_per_ton", sa.Float(), nullable=True))
+
+
+      def downgrade() -> None:
+          op.drop_column("orders", "price_per_ton")
+expect:
+  verdict: REFUSED
+  must_find: [float-on-money]

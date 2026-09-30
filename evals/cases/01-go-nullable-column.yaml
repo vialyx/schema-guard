@@ -1,0 +1,8 @@
+id: go-nullable-column
+mode: author
+prompt: >
+  QA inspectors want to leave free-text notes on an order. Add an optional
+  `inspection_notes` text column to orders. Existing orders have no notes.
+expect:
+  verdict: GO
+  new_migrations: true

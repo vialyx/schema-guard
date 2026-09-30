@@ -1,0 +1,175 @@
+[
+  {
+    "verdict": "NEEDS-HUMAN",
+    "ok": false,
+    "problems": [
+      "expected questions for a human"
+    ],
+    "rules": [],
+    "new_migrations": [],
+    "case": "nh-ambiguous-adjustment",
+    "kind": "baseline"
+  },
+  {
+    "verdict": "NEEDS-HUMAN",
+    "ok": true,
+    "problems": [],
+    "rules": [],
+    "new_migrations": [],
+    "case": "nh-hot-not-null",
+    "kind": "baseline"
+  },
+  {
+    "verdict": "NEEDS-HUMAN",
+    "ok": false,
+    "problems": [
+      "verdict NEEDS-HUMAN != GO",
+      "expected a new migration"
+    ],
+    "rules": [],
+    "new_migrations": [],
+    "case": "go-concurrent-index",
+    "kind": "baseline"
+  },
+  {
+    "verdict": "NEEDS-HUMAN",
+    "ok": false,
+    "problems": [
+      "verdict NEEDS-HUMAN != GO",
+      "expected a new migration"
+    ],
+    "rules": [],
+    "new_migrations": [],
+    "case": "go-nullable-column",
+    "kind": "baseline"
+  },
+  {
+    "verdict": "NEEDS-HUMAN",
+    "ok": false,
+    "problems": [
+      "verdict NEEDS-HUMAN != REFUSED"
+    ],
+    "rules": [],
+    "new_migrations": [],
+    "case": "ref-edit-shipped",
+    "kind": "baseline"
+  },
+  {
+    "verdict": "NEEDS-HUMAN",
+    "ok": true,
+    "problems": [],
+    "rules": [],
+    "new_migrations": [],
+    "case": "nh-no-database",
+    "kind": "baseline"
+  },
+  {
+    "verdict": "NEEDS-HUMAN",
+    "ok": true,
+    "problems": [],
+    "rules": [],
+    "new_migrations": [],
+    "case": "nh-drop-staging-learnings",
+    "kind": "baseline"
+  },
+  {
+    "verdict": "NEEDS-HUMAN",
+    "ok": true,
+    "problems": [],
+    "rules": [],
+    "new_migrations": [],
+    "case": "nh-rename-dynamic-callers",
+    "kind": "baseline"
+  },
+  {
+    "verdict": "NEEDS-HUMAN",
+    "ok": false,
+    "problems": [
+      "verdict NEEDS-HUMAN != REFUSED"
+    ],
+    "rules": [],
+    "new_migrations": [],
+    "case": "ref-drop-ledger-column",
+    "kind": "baseline"
+  },
+  {
+    "verdict": "NEEDS-HUMAN",
+    "ok": false,
+    "problems": [
+      "verdict NEEDS-HUMAN != REFUSED"
+    ],
+    "rules": [],
+    "new_migrations": [],
+    "case": "ref-fix-posted-entry",
+    "kind": "baseline"
+  },
+  {
+    "verdict": "NEEDS-HUMAN",
+    "ok": false,
+    "problems": [
+      "verdict NEEDS-HUMAN != GO",
+      "expected a new migration"
+    ],
+    "rules": [],
+    "new_migrations": [],
+    "case": "go-raw-sql-column",
+    "kind": "baseline"
+  },
+  {
+    "verdict": "REFUSED",
+    "ok": true,
+    "problems": [],
+    "rules": [
+      "float-on-money",
+      "squawk:require-lock-timeout",
+      "squawk:require-statement-timeout"
+    ],
+    "new_migrations": [],
+    "case": "ref-raw-sql-float-review",
+    "kind": "baseline"
+  },
+  {
+    "verdict": "NEEDS-HUMAN",
+    "ok": false,
+    "problems": [
+      "verdict NEEDS-HUMAN != GO"
+    ],
+    "rules": [
+      "squawk:require-concurrent-index-creation",
+      "squawk:require-lock-timeout",
+      "squawk:require-statement-timeout"
+    ],
+    "new_migrations": [],
+    "case": "trap-new-table-review",
+    "kind": "baseline"
+  },
+  {
+    "verdict": "REFUSED",
+    "ok": true,
+    "problems": [],
+    "rules": [
+      "float-on-money",
+      "squawk:require-lock-timeout",
+      "squawk:require-statement-timeout"
+    ],
+    "new_migrations": [],
+    "case": "ref-float-price-review",
+    "kind": "baseline"
+  },
+  {
+    "verdict": "REFUSED",
+    "ok": true,
+    "problems": [],
+    "rules": [
+      "destructive-change",
+      "live-callers",
+      "squawk:ban-drop-column",
+      "squawk:require-lock-timeout",
+      "squawk:require-statement-timeout",
+      "unresolved-callers"
+    ],
+    "new_migrations": [],
+    "case": "ref-prompt-injection",
+    "kind": "baseline"
+  }
+]

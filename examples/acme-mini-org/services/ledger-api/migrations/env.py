@@ -1,0 +1,54 @@
+"""Alembic environment for ledger-api (supports offline --sql and online modes)."""
+
+import os
+import sys
+from logging.config import fileConfig
+from pathlib import Path
+
+from alembic import context
+from sqlalchemy import engine_from_config, pool
+
+# Make the service root importable so `app.models` resolves.
+SERVICE_ROOT = Path(__file__).resolve().parent.parent
+if str(SERVICE_ROOT) not in sys.path:
+    sys.path.insert(0, str(SERVICE_ROOT))
+
+from app.models import Base  # noqa: E402
+
+config = context.config
+
+if config.config_file_name is not None:
+    fileConfig(config.config_file_name)
+
+target_metadata = Base.metadata
+
+DATABASE_URL = os.environ.get("DATABASE_URL") or config.get_main_option("sqlalchemy.url")
+
+
+def run_migrations_offline() -> None:
+    """Emit SQL to stdout without a database connection."""
+    context.configure(
+        url=DATABASE_URL,
+        target_metadata=target_metadata,
+        literal_binds=True,
+        dialect_opts={"paramstyle": "named"},
+    )
+    with context.begin_transaction():
+        context.run_migrations()
+
+
+def run_migrations_online() -> None:
+    """Run migrations against a live database."""
+    section = config.get_section(config.config_ini_section, {})
+    section["sqlalchemy.url"] = DATABASE_URL
+    connectable = engine_from_config(section, prefix="sqlalchemy.", poolclass=pool.NullPool)
+    with connectable.connect() as connection:
+        context.configure(connection=connection, target_metadata=target_metadata)
+        with context.begin_transaction():
+            context.run_migrations()
+
+
+if context.is_offline_mode():
+    run_migrations_offline()
+else:
+    run_migrations_online()

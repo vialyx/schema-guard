@@ -1,0 +1,52 @@
+[
+  {
+    "verdict": "NEEDS-HUMAN",
+    "ok": false,
+    "problems": [
+      "expected questions for a human"
+    ],
+    "rules": [],
+    "new_migrations": [],
+    "case": "nh-ambiguous-adjustment",
+    "kind": "baseline"
+  },
+  {
+    "verdict": "NEEDS-HUMAN",
+    "ok": true,
+    "problems": [],
+    "rules": [],
+    "new_migrations": [],
+    "case": "nh-ambiguous-adjustment",
+    "kind": "skill",
+    "cost_usd": 0.2103646,
+    "turns": 7,
+    "seconds": 32.8,
+    "final_message": "EDS-HUMAN**, and I wrote no migration. \"Grade adjustment\" doesn't say what unit, sign or shape it should have, and each answer changes the column and the reconciliation maths. `sg verdict` ran and exited 1. No checks were run, because there was no migration to check.\n\nThe questions are on the card and saved in `.schema-guard/llm.json`. Each one has my recommended default:\n\n1. **Unit and sign:** a signed kg delta, an unsigned deduction, or a percentage? I'd go with a signed `grade_adjustment_kg NUMERIC(14,3)`.\n2. **Shape:** one value per order, or several adjustments with a reason and grade code in a new table? I'd go with a single nullable column unless procurement needs history.\n3. **Existing rows:** NULL or 0? I'd go with NULL and no backfill.\n4. **Accepted weight:** compute it in `reconciliation.py` at read time, or store it? I'd compute it and leave `net_weight_kg` alone.\n5. **legacy-sync:** `services/legacy-sync/sync.py:59` runs a dynamic `UPDATE orders SET <field>`. Does it need to read or write the new field? Please confirm with @acme/integrations.\n\nOnce these are answered, the change is a small additive migration `0005` on `orders`, plus the reconciliation update and tests."
+  },
+  {
+    "verdict": "NEEDS-HUMAN",
+    "ok": true,
+    "problems": [],
+    "rules": [],
+    "new_migrations": [],
+    "case": "nh-ambiguous-adjustment",
+    "kind": "skill",
+    "cost_usd": 0.2537138,
+    "turns": 11,
+    "seconds": 32.9,
+    "final_message": "since there was nothing to check.\n\nThe five questions on the card, each with a recommended default:\n1. **Unit and shape:** is it an absolute kg value (recommended: `orders.grade_adjustment_kg NUMERIC(14,3)`), a percentage, or a change of grade that alters the price?\n2. **Sign:** is it a signed delta added to `net_weight_kg` (recommended), or a positive deduction subtracted from it?\n3. **History:** one current value per order (recommended), or several adjustments over time in an append-only table?\n4. **Existing rows:** NULL (recommended, meaning no adjustment) or 0.000?\n5. **Other consumers:** `legacy-sync/sync.py` builds dynamic `UPDATE orders` and reads `net_weight_kg`, so @acme/integrations needs to confirm it is unaffected. Also, should already-posted ledger entries change? If so, that needs reversing entries, never UPDATEs.\n\nOnce these are answered, the expected change is a nullable column on `orders` (250k rows, class core) with no backfill. It would come with a model change, a `reconciliation.py` change that computes accepted weight in `Decimal`, and tests.\n\nThe answers are also saved in `.schema-guard/llm.json`. I made no `LEARNINGS.md` proposal because nothing was answered."
+  },
+  {
+    "verdict": "NEEDS-HUMAN",
+    "ok": true,
+    "problems": [],
+    "rules": [],
+    "new_migrations": [],
+    "case": "nh-ambiguous-adjustment",
+    "kind": "skill",
+    "cost_usd": 0.2418972,
+    "turns": 10,
+    "seconds": 42.0,
+    "final_message": "he questions below are in `.schema-guard/llm.json`, and the card printed above can be pasted into the ticket. I recommend the first option in each.\n\n1. **Sign:** is it a deduction that is always zero or more (`grade_deduction_kg`, accepted = net \u2212 deduction), or a signed adjustment (`grade_adjustment_kg`, accepted = net + adjustment)?\n2. **Unit:** is it kilograms as `NUMERIC(14,3)`, or a percentage or rate applied to `net_weight_kg`?\n3. **Existing rows:** should they get NULL meaning \"no adjustment\", or a default of 0? NULL avoids touching the 250k rows in `orders`.\n4. **Shape:** is one adjustment per order enough, or do you need several adjustments per order with a history?\n5. **Other owners:** `services/legacy-sync/sync.py` builds SQL on `orders` dynamically, so grep can't show everything it uses. `@acme/integrations` should confirm it doesn't need the new column. `@acme/finance-eng` owns `reconciliation.py` and has to approve the change to `accepted_weight_kg`.\n\n`sg check` was not run, since there was no migration to check. Once these are answered, the plan is migration `0005`, which adds a nullable column and its CHECK constraint, plus the `accepted_weight_kg` change and tests."
+  }
+]

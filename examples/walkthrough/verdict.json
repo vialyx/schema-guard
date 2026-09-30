@@ -1,0 +1,210 @@
+{
+  "schema_version": 1,
+  "verdict": "NEEDS-HUMAN",
+  "reasons": [
+    "1 open question(s) for a human"
+  ],
+  "intent": "Record per-order contamination deductions (kg) found at goods-in, and make reconciliation bill on accepted weight (net minus deduction) at unchanged price per kg",
+  "summary": "Adds nullable orders.grade_deduction_kg NUMERIC(14,3) (NULL = 0) with CHECKs >= 0 and <= net_weight_kg (NOT VALID in 0005, validated in 0006); accepted_weight_kg() subtracts it. All sg checks pass; one integrations sign-off is still open.",
+  "tables": [
+    {
+      "name": "orders",
+      "class": "core",
+      "est_rows": 250000
+    }
+  ],
+  "plan": {
+    "expand": [
+      "0005: ADD COLUMN orders.grade_deduction_kg NUMERIC(14,3) NULL + two CHECKs NOT VALID (lock_timeout/statement_timeout set)",
+      "0006: VALIDATE both CHECKs",
+      "models.py: column and constraints; reconciliation.accepted_weight_kg subtracts COALESCE(deduction, 0)",
+      "tests: deduction, NULL/zero, full rejection, cancelled, value, reconcile with reversal"
+    ],
+    "contract": []
+  },
+  "files_changed": [
+    "services/ledger-api/app/models.py",
+    "services/ledger-api/app/services/reconciliation.py",
+    "services/ledger-api/migrations/versions/0005_add_orders_grade_deduction.py",
+    "services/ledger-api/migrations/versions/0006_validate_orders_grade_deduction.py",
+    "services/ledger-api/tests/test_reconciliation.py"
+  ],
+  "checks": [
+    {
+      "name": "policy",
+      "status": "pass",
+      "summary": "no findings across 2 migrations",
+      "findings": [],
+      "details": {
+        "rules_run": [
+          "destructive-change",
+          "edit-shipped-migration",
+          "float-on-money",
+          "index-not-concurrent",
+          "mutate-ledger-rows",
+          "not-null-on-existing-table",
+          "unbatched-backfill"
+        ],
+        "statements": 9
+      }
+    },
+    {
+      "name": "callers",
+      "status": "pass",
+      "summary": "4 caller reference(s) across 1 target(s)",
+      "findings": [],
+      "details": {
+        "orders.grade_deduction_kg": {
+          "op": "add_column",
+          "resolved": [
+            {
+              "path": "services/ledger-api/app/services/reconciliation.py",
+              "line": 35,
+              "text": "deduction = Decimal(order.grade_deduction_kg or 0)"
+            }
+          ],
+          "unresolved": [
+            {
+              "path": "services/legacy-sync/sync.py",
+              "line": 41,
+              "text": "f\"SELECT raw->>'ref' AS order_no, (raw->>'weight_t')::numeric * 1000 FROM {table}\"",
+              "why": "SQL built dynamically; target cannot be resolved statically"
+            },
+            {
+              "path": "services/legacy-sync/sync.py",
+              "line": 44,
+              "text": "cur.execute(f\"SELECT order_no, net_weight_kg FROM {table}\")",
+              "why": "SQL built dynamically; target cannot be resolved statically"
+            },
+            {
+              "path": "services/legacy-sync/sync.py",
+              "line": 59,
+              "text": "cur.execute(f\"UPDATE orders SET {field} = %s WHERE order_no = %s\", (value, order_no))",
+              "why": "SQL built dynamically; target cannot be resolved statically"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "squawk",
+      "status": "pass",
+      "summary": "clean",
+      "findings": [],
+      "details": {
+        "ignored_rules": [
+          "prefer-bigint-over-int",
+          "prefer-bigint-over-smallint",
+          "prefer-identity",
+          "prefer-robust-stmts",
+          "prefer-text-field",
+          "prefer-timestamptz"
+        ]
+      }
+    },
+    {
+      "name": "roundtrip",
+      "status": "pass",
+      "summary": "up/down/up clean; schema restored exactly",
+      "findings": [],
+      "details": {
+        "base_revision": "0004"
+      }
+    },
+    {
+      "name": "invariants",
+      "status": "pass",
+      "summary": "3 invariant(s) hold before/after and on re-run",
+      "findings": [],
+      "details": {
+        "before": {
+          "ledger balance per account": [
+            [
+              "1000-CASH",
+              "1500000"
+            ],
+            [
+              "1200-AR",
+              "31692025"
+            ],
+            [
+              "2100-AP",
+              "-21792250"
+            ],
+            [
+              "4000-FEE",
+              "21302"
+            ]
+          ],
+          "movements reference real orders": [
+            [
+              "0"
+            ]
+          ],
+          "total net weight": [
+            [
+              "243999.770"
+            ]
+          ]
+        },
+        "after": {
+          "ledger balance per account": [
+            [
+              "1000-CASH",
+              "1500000"
+            ],
+            [
+              "1200-AR",
+              "31692025"
+            ],
+            [
+              "2100-AP",
+              "-21792250"
+            ],
+            [
+              "4000-FEE",
+              "21302"
+            ]
+          ],
+          "movements reference real orders": [
+            [
+              "0"
+            ]
+          ],
+          "total net weight": [
+            [
+              "243999.770"
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "tests",
+      "status": "pass",
+      "summary": "12 passed in 0.01s",
+      "findings": [],
+      "details": {}
+    }
+  ],
+  "findings": [],
+  "questions": [
+    "legacy-sync: @acme/integrations must confirm before deploy. pull_updates runs UPDATE orders SET {field} = ... for ERP fields (including ERP_EXTRA_FIELDS) with no per-row error handling, so an ERP edit that lowers net_weight_kg below an existing deduction now violates ck_orders_grade_deduction_le_net and fails the whole nightly batch. Confirm no ERP_EXTRA_FIELDS maps to grade_deduction_kg, that ERP keeps receiving full net_weight_kg, and whether pull_updates should handle constraint violations per row. Recommended: get sign-off, then handle per-row failures in a follow-up."
+  ],
+  "suggestions": [
+    "Billed orders: recording a deduction after posting makes reconcile() report a mismatch. Name who posts the reversing and corrected 1200-AR entries (finance-eng), or state that the mismatch report is the trigger.",
+    "No write path for grade_deduction_kg exists yet (API/importer); list the intended writers in the follow-up PR.",
+    "Downgrade drops the column and silently discards deductions recorded after deploy; only safe before the column is in use.",
+    "accepted_weight_kg does not clamp; it relies on the DB CHECK. Add a test or guard for deduction > net weight."
+  ],
+  "owners": [
+    "@acme/eng",
+    "@acme/finance-eng",
+    "@acme/data-platform"
+  ],
+  "llm_escalated": false,
+  "policy_sources": [
+    "/Users/maksimvialykh/Library/Application Support/Claude/scratch-workspaces/2373eecf-f1a9-4218-9226-33794f158cc9/b6cf10f0-5386-4f06-889f-3756b5c72a79/scratch-2026-09-29-2bba07/schema-guard/plugins/schema-guard/engine/sg/defaults.yaml",
+    "/private/var/folders/vs/520w5bhd1qn25ndtsmhg2zwh0000gn/T/sg-walkthrough-y3vjonoy/repo/schema-guard.yaml"
+  ]
+}

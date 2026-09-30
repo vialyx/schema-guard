@@ -1,0 +1,33 @@
+[
+  {
+    "verdict": "GO",
+    "ok": true,
+    "problems": [],
+    "rules": [
+      "squawk:require-lock-timeout",
+      "squawk:require-statement-timeout"
+    ],
+    "new_migrations": [],
+    "case": "trap-new-table-review",
+    "kind": "baseline"
+  },
+  {
+    "verdict": "NEEDS-HUMAN",
+    "ok": false,
+    "problems": [
+      "verdict NEEDS-HUMAN != GO"
+    ],
+    "rules": [
+      "squawk:require-lock-timeout",
+      "squawk:require-statement-timeout"
+    ],
+    "new_migrations": [],
+    "case": "trap-new-table-review",
+    "kind": "skill",
+    "cost_usd": 0.2187398,
+    "turns": 7,
+    "seconds": 58.4,
+    "final_message": "locks and rewrites nothing that exists.\n- **Types:** Units follow the conventions. Weight is `NUMERIC(14,3)` kg and money is `BIGINT` cents, with no floats.\n- **Rollback:** `downgrade()` is exact.\n- **Checks:** The policy, callers, round-trip, invariants and tests checks all pass.\n- **Squawk:** It warns about a missing `lock_timeout` and `statement_timeout`. Both warnings are on a brand-new table, so they are low risk. Adding `SET lock_timeout` and `SET statement_timeout` at the top of `upgrade()` would silence them.\n\n**Questions for you**\n1. `credit_amount_cents` has no sign constraint, while `deduction_kg` has `>= 0`. My recommendation is to add `CHECK (credit_amount_cents >= 0)`.\n2. Nothing in the code reads or writes this table yet, and it isn't tied to the ledger. My recommendation is a follow-up PR that posts one append-only `ledger_entries` row per adjustment, with a link back to the adjustment. It should never update ledger rows or `orders.net_weight_kg` in place.\n\nI didn't change the migration. The card lists `@acme/data-platform` as the required reviewer, and `.schema-guard/llm.json` is written. There is no `LEARNINGS.md` proposal, since you haven't answered anything yet.",
+    "workdir": "/var/folders/vs/520w5bhd1qn25ndtsmhg2zwh0000gn/T/sg-eval-trap-new-table-review-qqt8tlxt"
+  }
+]

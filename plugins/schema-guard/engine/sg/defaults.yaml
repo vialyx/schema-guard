@@ -1,0 +1,32 @@
+# Engine defaults. Override org-wide via $SG_ORG_POLICY, per repo via schema-guard.yaml.
+version: 1
+dialect: postgres
+base_ref: main            # the ref that represents "already shipped"; override with $SG_BASE_REF
+hot_row_threshold: 1000000
+
+columns:
+  money: ["*amount*", "*price*", "*cost*", "*_cents", "*balance*", "*total*", "*fee*"]
+  quantity: ["*weight*", "*_kg", "*_lb", "*qty*", "*quantity*", "*tonnage*"]
+
+rules: {}                 # per-rule overrides: {enabled: false} or {severity: ask}
+
+checks:
+  squawk:
+    # squawk rules that are noise for us
+    ignore: [prefer-bigint-over-int, prefer-bigint-over-smallint, prefer-identity, prefer-text-field, prefer-robust-stmts, prefer-timestamptz]
+    # squawk rules that must stop the line (everything else becomes a warning).
+    # Drops/renames are left as warnings on purpose: the policy-aware
+    # `destructive-change` rule decides those (a scratch table may be dropped).
+    escalate:
+      adding-required-field: ask
+      changing-column-type: ask
+      adding-not-nullable-field: ask
+      constraint-missing-not-valid: ask
+      adding-foreign-key-constraint: ask
+      require-concurrent-index-creation: ask
+      disallowed-unique-constraint: ask
+      ban-truncate-cascade: refuse
+  roundtrip:
+    require_downgrade: true
+  tests:
+    timeout_seconds: 300

@@ -1,0 +1,8 @@
+id: nh-no-database
+mode: author
+env:
+  SG_DISABLE_DB: "1"
+prompt: >
+  Add an optional carrier_name text column to orders.
+expect:
+  verdict: NEEDS-HUMAN

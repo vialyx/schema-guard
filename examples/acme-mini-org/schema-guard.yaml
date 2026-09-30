@@ -1,0 +1,63 @@
+# schema-guard configuration for the Acme mini-org.
+# schema-guard reads this file to decide which schema changes need extra care
+# and how to prove that a migration does not corrupt business data.
+
+# Config format version.
+version: 1
+
+# SQL dialect used for DDL risk rules and lock analysis.
+dialect: postgres
+
+# Branch that holds the shipped schema. Changes are diffed against this ref.
+base_ref: main
+
+# Services that own migrations. For each one schema-guard knows:
+#   path    - service root (relative to the repo root)
+#   adapter - migration tool used to apply/revert revisions
+#   seed    - SQL file (relative to path) that loads realistic data at head
+#   tests   - command run from the service root after migrating
+services:
+  - path: services/ledger-api
+    adapter: alembic
+    seed: seed.sql
+    tests: "python -m pytest -q tests"
+  - path: services/catalog-db
+    adapter: raw_sql
+    seed: seed.sql
+
+# Table classification. The class sets how strict the checks are:
+#   core    - business entities; changes need a rollback plan
+#   hot     - high write volume; anything that takes a long lock is blocked
+#   ledger  - financial records; append-only, invariants must hold exactly
+#   audit   - compliance history; never rewritten or dropped
+#   scratch - disposable working tables; relaxed rules
+# est_rows is a production size estimate used to predict lock and rewrite cost.
+tables:
+  orders: {class: core, est_rows: 250000}
+  inventory_movements: {class: hot, est_rows: 40000000}
+  ledger_entries: {class: ledger, est_rows: 12000000}
+  audit_log: {class: audit, est_rows: 30000000}
+  order_import_staging: {class: scratch}
+  materials: {class: core, est_rows: 5000}
+
+# Invariants are queries run on the seeded database before and after a change.
+#   expect: unchanged - result must be identical before and after
+#   expect: zero      - result must be a single 0
+#   service           - only run for this service (omit to run for every service)
+invariants:
+  - name: ledger balance per account
+    service: services/ledger-api
+    sql: "SELECT account_code, SUM(amount_cents) FROM ledger_entries GROUP BY 1 ORDER BY 1"
+    expect: unchanged
+  - name: movements reference real orders
+    service: services/ledger-api
+    sql: "SELECT count(*) FROM inventory_movements m LEFT JOIN orders o ON o.id = m.order_id WHERE m.order_id IS NOT NULL AND o.id IS NULL"
+    expect: zero
+  - name: total net weight
+    service: services/ledger-api
+    sql: "SELECT SUM(net_weight_kg) FROM orders"
+    expect: unchanged
+  - name: catalog size
+    service: services/catalog-db
+    sql: "SELECT count(*), SUM(list_price_per_kg_cents) FROM materials"
+    expect: unchanged

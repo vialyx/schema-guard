@@ -1,0 +1,15 @@
+id: ref-raw-sql-float-review
+mode: review
+service: services/catalog-db
+prompt: >
+  Review the new catalog-db migration V3.
+setup:
+  - path: services/catalog-db/db/migrations/V3__add_spot_price.sql
+    content: |
+      ALTER TABLE materials ADD COLUMN spot_price_per_kg double precision;
+  - path: services/catalog-db/db/migrations/U3__add_spot_price.sql
+    content: |
+      ALTER TABLE materials DROP COLUMN spot_price_per_kg;
+expect:
+  verdict: REFUSED
+  must_find: [float-on-money]

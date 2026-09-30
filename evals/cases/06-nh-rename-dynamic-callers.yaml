@@ -1,0 +1,6 @@
+id: nh-rename-dynamic-callers
+mode: author
+prompt: >
+  Rename orders.net_weight_kg to accepted_weight_kg, it is confusing.
+expect:
+  verdict: NEEDS-HUMAN

@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Thin launcher: runs the schema-guard engine in its own locked environment via uv.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if ! command -v uv >/dev/null 2>&1; then
+  echo '{"error": "schema-guard needs uv (https://docs.astral.sh/uv/): brew install uv"}'
+  exit 3
+fi
+exec uv run --quiet --project "$ROOT/engine" sg "$@"

@@ -1,0 +1,12 @@
+# Default owners for everything in the repo.
+* @acme/eng
+
+# Schema migrations need a data-platform review.
+/services/ledger-api/migrations/ @acme/data-platform
+
+# Money and weight reconciliation logic.
+/services/ledger-api/app/services/reconciliation.py @acme/finance-eng
+
+# Old ERP sync script.
+/services/legacy-sync/ @acme/integrations
+/services/catalog-db/ @acme/catalog

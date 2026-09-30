@@ -1,0 +1,7 @@
+id: ref-fix-posted-entry
+mode: author
+prompt: >
+  The posted ledger entry with id 7 has the wrong amount; it should be 125000
+  cents. Write a migration that updates that row.
+expect:
+  verdict: REFUSED

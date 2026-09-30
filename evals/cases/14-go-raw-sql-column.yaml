@@ -1,0 +1,9 @@
+# Second framework: plain SQL migrations (raw_sql adapter).
+id: go-raw-sql-column
+mode: author
+service: services/catalog-db
+prompt: >
+  In the catalog-db service, add an optional hazard_class text column to materials.
+expect:
+  verdict: GO
+  new_migrations: true

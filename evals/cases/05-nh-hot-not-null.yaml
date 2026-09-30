@@ -1,0 +1,7 @@
+id: nh-hot-not-null
+mode: author
+prompt: >
+  Every inventory movement must record which yard it came from. Add a required
+  source_yard_id bigint column to inventory_movements.
+expect:
+  verdict: NEEDS-HUMAN

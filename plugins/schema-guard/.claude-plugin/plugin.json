@@ -1,0 +1,7 @@
+{
+  "name": "schema-guard",
+  "version": "0.1.0",
+  "description": "Safe database schema changes for business-critical tables: an AI skill that investigates, asks, writes and verifies migrations, backed by deterministic checks and a GO / NEEDS-HUMAN / REFUSED verdict.",
+  "license": "MIT",
+  "keywords": ["migrations", "database", "postgres", "alembic", "code-review", "safety"]
+}

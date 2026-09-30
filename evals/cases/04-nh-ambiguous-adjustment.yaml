@@ -1,0 +1,9 @@
+id: nh-ambiguous-adjustment
+mode: author
+prompt: >
+  Procurement needs grade adjustments on orders so that reconciliation uses the
+  accepted weight. Please add it.
+expect:
+  verdict: NEEDS-HUMAN
+  questions: true
+  new_migrations: false

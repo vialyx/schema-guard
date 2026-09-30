@@ -1,0 +1,31 @@
+[
+  {
+    "verdict": "NEEDS-HUMAN",
+    "ok": false,
+    "problems": [
+      "verdict NEEDS-HUMAN != GO",
+      "expected a new migration"
+    ],
+    "rules": [],
+    "new_migrations": [],
+    "case": "go-nullable-column",
+    "kind": "baseline"
+  },
+  {
+    "verdict": "MISSING",
+    "ok": false,
+    "problems": [
+      "verdict MISSING != GO",
+      "expected a new migration"
+    ],
+    "rules": [],
+    "new_migrations": [],
+    "case": "go-nullable-column",
+    "kind": "skill",
+    "cost_usd": 0,
+    "turns": 1,
+    "seconds": 1.1,
+    "final_message": "Not logged in \u00b7 Please run /login",
+    "workdir": "/var/folders/vs/520w5bhd1qn25ndtsmhg2zwh0000gn/T/sg-eval-go-nullable-column-zk6mw7v7"
+  }
+]

@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "schema-guard verdict",
+  "type": "object",
+  "required": ["schema_version", "verdict", "reasons", "checks", "findings", "questions", "owners", "plan"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "verdict": {"enum": ["GO", "NEEDS-HUMAN", "REFUSED"]},
+    "reasons": {"type": "array", "items": {"type": "string"}},
+    "intent": {"type": "string"},
+    "summary": {"type": "string"},
+    "tables": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "class"],
+        "properties": {
+          "name": {"type": "string"},
+          "class": {"type": "string"},
+          "est_rows": {"type": ["integer", "null"]}
+        }
+      }
+    },
+    "plan": {
+      "type": "object",
+      "properties": {
+        "expand": {"type": "array", "items": {"type": "string"}},
+        "contract": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "files_changed": {"type": "array", "items": {"type": "string"}},
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "status"],
+        "properties": {
+          "name": {"type": "string"},
+          "status": {"enum": ["pass", "warn", "skipped", "ask", "refuse"]},
+          "summary": {"type": "string"}
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["rule", "severity", "message"],
+        "properties": {
+          "rule": {"type": "string"},
+          "severity": {"enum": ["pass", "warn", "skipped", "ask", "refuse"]},
+          "message": {"type": "string"},
+          "evidence": {"type": "string"},
+          "fix": {"type": "string"}
+        }
+      }
+    },
+    "questions": {"type": "array", "items": {"type": "string"}},
+    "suggestions": {"type": "array", "items": {"type": "string"}},
+    "owners": {"type": "array", "items": {"type": "string"}},
+    "llm_escalated": {"type": "boolean"},
+    "policy_sources": {"type": "array", "items": {"type": "string"}}
+  }
+}

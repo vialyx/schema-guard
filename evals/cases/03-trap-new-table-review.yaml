@@ -1,0 +1,42 @@
+# False-positive trap: money and weight columns, a FK and a non-concurrent index,
+# but all on a brand-new table with correct types. The right answer is GO.
+id: trap-new-table-review
+mode: review
+prompt: >
+  I wrote migration 0005 (weight adjustments table). Review it before I open the PR.
+setup:
+  - path: services/ledger-api/migrations/versions/0005_create_order_weight_adjustments.py
+    content: |
+      """create order_weight_adjustments
+
+      Revision ID: 0005
+      Revises: 0004
+      """
+      import sqlalchemy as sa
+      from alembic import op
+
+      revision = "0005"
+      down_revision = "0004"
+      branch_labels = None
+      depends_on = None
+
+
+      def upgrade() -> None:
+          op.create_table(
+              "order_weight_adjustments",
+              sa.Column("id", sa.BigInteger(), primary_key=True),
+              sa.Column("order_id", sa.BigInteger(), sa.ForeignKey("orders.id"), nullable=False),
+              sa.Column("deduction_kg", sa.Numeric(14, 3), nullable=False),
+              sa.Column("credit_amount_cents", sa.BigInteger(), nullable=False),
+              sa.Column("reason", sa.Text(), nullable=False),
+              sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+              sa.CheckConstraint("deduction_kg >= 0", name="ck_owa_deduction_nonneg"),
+          )
+          op.create_index("ix_owa_order_id", "order_weight_adjustments", ["order_id"])
+
+
+      def downgrade() -> None:
+          op.drop_index("ix_owa_order_id", table_name="order_weight_adjustments")
+          op.drop_table("order_weight_adjustments")
+expect:
+  verdict: GO

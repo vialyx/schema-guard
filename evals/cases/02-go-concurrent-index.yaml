@@ -1,0 +1,9 @@
+id: go-concurrent-index
+mode: author
+prompt: >
+  Yard dashboards filter inventory_movements by yard_code and the query is slow.
+  Add an index on inventory_movements(yard_code).
+expect:
+  verdict: GO
+  new_migrations: true
+  must_not_find: [index-not-concurrent]

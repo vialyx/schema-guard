@@ -1,0 +1,14 @@
+[
+  {
+    "verdict": "GO",
+    "ok": true,
+    "problems": [],
+    "rules": [
+      "squawk:require-lock-timeout",
+      "squawk:require-statement-timeout"
+    ],
+    "new_migrations": [],
+    "case": "trap-new-table-review",
+    "kind": "baseline"
+  }
+]
