@@ -77,18 +77,19 @@ No production credentials are needed anywhere. `sg` only ever connects to a thro
 ## Example
 [examples/walkthrough](examples/walkthrough/) is a recorded two-turn session:
 1. **An ambiguous request:** "add grade deductions to orders". The skill wrote no migration. It asked 5 questions ([card](examples/walkthrough/card-turn1.md)) covering units, cardinality, NULL meaning, already-billed ledger rows, and a legacy job that builds SQL at runtime.
-2. **After the answers:** it wrote the migrations, model, code and tests, and all checks passed. The verdict stayed **NEEDS-HUMAN** because the legacy job could now trip the new constraint, so its owners must sign off ([card](examples/walkthrough/card-turn2.md), [diff](examples/walkthrough/changes.diff)).
+2. **After the answers:** it wrote the migration, model, reconciliation, API and tests, and the round trip, invariants and tests passed. The verdict is **NEEDS-HUMAN** because the legacy ERP job writes `orders` with SQL built at runtime and could now trip the new CHECK, failing the nightly batch. The engine flags it (`constraint-dynamic-writers`), and the skill turns it into one question for @acme/integrations ([card](examples/walkthrough/card-turn2.md), [diff](examples/walkthrough/changes.diff), [transcript](examples/walkthrough/transcript.md)).
 
 ## Evals
-There are 15 labelled cases across GO, NEEDS-HUMAN and REFUSED, including a false-positive trap and a prompt injection ([evals/cases](evals/cases/)). Each run starts from a fresh demo repo and runs headless `claude -p`.
+There are 16 labelled cases across GO, NEEDS-HUMAN and REFUSED, including a false-positive trap, a prompt injection and a constraint on a table with dynamic-SQL writers ([evals/cases](evals/cases/)). Each run starts from a fresh demo repo and runs headless `claude -p`.
 
 | (Sonnet, 3 runs per case) | Correct |
 |---|---|
-| Deterministic checks alone | 8/15 cases |
+| Deterministic checks alone | 9/16 cases (they can't write, ask or refuse on intent) |
 | Skill v1 | 43/45 runs (both misses over-asked on a safe new table) |
 | Skill v2: adds non-blocking `suggestions` and a test for what counts as a blocking question | Trap case 3/3; the ambiguous case still asks, 3/3 |
+| **Current** (P0–P1 plus the constraint-writer check), [results](evals/results/20260930T142133Z.json) | **48/48 runs**, every case consistent across its 3 runs, $8.36 in total |
 
-A run costs about $0.25 and takes 30–80 s. To reproduce: `uv run --project plugins/schema-guard/engine python evals/run_evals.py --runs 3 --model sonnet` (add `--baseline-only` for a free run).
+A run costs about $0.50 and takes 15–50 s. To reproduce: `uv run --project plugins/schema-guard/engine python evals/run_evals.py --runs 3 --model sonnet` (add `--baseline-only` for a free run). A perfect score only means the cases pass: case 16 exists because re-recording the walkthrough found a miss the suite didn't cover ([build notes](docs/build-notes.md)).
 
 ## Limitations
 - Postgres only. SQL analysis is regex-based: CTE-wrapped DML, `DO $$` blocks, volatile defaults, enum changes and `DROP INDEX` without CONCURRENTLY are not covered.

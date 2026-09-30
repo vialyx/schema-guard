@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import subprocess
 import tempfile
@@ -43,7 +44,8 @@ def scrub(text: str, work: Path) -> str:
                        (ROOT, "/opt/schema-guard"), (Path.home(), "/home/user")):
         text = text.replace(str(real), fake)
         text = text.replace(str(real).replace("/", "-"), fake.replace("/", "-"))  # ~/.claude/projects slugs
-    return text
+    # Claude Code's per-session temp dirs carry the session id.
+    return re.sub(r"/tmp/claude-\d+/([^/\"\s]+)/[0-9a-f-]{36}", r"/tmp/claude/\1/<session>", text)
 
 
 def run_turn(prompt: str, repo: Path, model: str, resume: str | None) -> list[dict]:
