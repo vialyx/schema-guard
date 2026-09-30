@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import subprocess
 import tempfile
@@ -43,7 +44,8 @@ def scrub(text: str, work: Path) -> str:
                        (ROOT, "/opt/schema-guard"), (Path.home(), "/home/user")):
         text = text.replace(str(real), fake)
         text = text.replace(str(real).replace("/", "-"), fake.replace("/", "-"))  # ~/.claude/projects slugs
-    return text
+    # Claude Code's per-session temp dirs carry the session id.
+    return re.sub(r"/tmp/claude-\d+/([^/\"\s]+)/[0-9a-f-]{36}", r"/tmp/claude/\1/<session>", text)
 
 
 def run_turn(prompt: str, repo: Path, model: str, resume: str | None) -> list[dict]:
@@ -74,9 +76,11 @@ def render(events: list[dict], title: str) -> str:
                     else:
                         lines.append(f"> **{block['name']}**")
                     lines.append("")
-        elif ev.get("type") == "result":
-            lines.append(f"_turns: {ev.get('num_turns')}, cost: ${ev.get('total_cost_usd', 0):.2f}, "
-                         f"time: {ev.get('duration_ms', 0) / 1000:.0f}s_")
+    results = [ev for ev in events if ev.get("type") == "result"]
+    if results:  # subagents emit their own result events; the session's is the last one
+        ev = results[-1]
+        lines.append(f"_turns: {ev.get('num_turns')}, cost: ${ev.get('total_cost_usd', 0):.2f}, "
+                     f"time: {ev.get('duration_ms', 0) / 1000:.0f}s_")
     return "\n".join(lines) + "\n"
 
 
@@ -98,7 +102,8 @@ def main() -> None:
     (HERE / "card-turn2.md").write_text(scrub((repo / ".schema-guard" / "card.md").read_text(), work))
     (HERE / "verdict.json").write_text(scrub((repo / ".schema-guard" / "verdict.json").read_text(), work))
 
-    subprocess.run(["git", "add", "-A", "--", ".", ":(exclude).schema-guard"], cwd=repo, check=True)
+    subprocess.run(["git", "add", "-A", "--", ".", ":(exclude).schema-guard", ":(exclude)**/__pycache__/**"],
+                   cwd=repo, check=True)
     diff = subprocess.run(["git", "diff", "--cached"], cwd=repo, capture_output=True, text=True).stdout
     (HERE / "changes.diff").write_text(scrub(diff, work))
 

@@ -98,7 +98,7 @@ def is_unparsed(stmt: Statement) -> bool:
 class Touch:
     table: str
     column: str | None
-    op: str  # add_column | drop_column | rename_column | rename_table | alter_type | set_not_null | drop_table | create_table | create_index | update | delete | truncate | other
+    op: str  # add_column | drop_column | rename_column | rename_table | alter_type | set_not_null | add_constraint | drop_table | create_table | create_index | update | delete | truncate | other
 
 
 @dataclass(frozen=True)
@@ -171,6 +171,8 @@ def _action_touch(table: str, a: str) -> Touch:
         return Touch(table, mm.group(1), "alter_type")
     if mm := re.match(rf"ALTER (?:COLUMN )?{_IDENT} SET NOT NULL", a, re.I):
         return Touch(table, mm.group(1), "set_not_null")
+    if re.match(rf"ADD (?:CONSTRAINT {_IDENT} )?(?:CHECK|UNIQUE|FOREIGN KEY|EXCLUDE)\b", a, re.I):
+        return Touch(table, None, "add_constraint")  # restricts what every existing writer may write
     return Touch(table, None, "other")
 
 

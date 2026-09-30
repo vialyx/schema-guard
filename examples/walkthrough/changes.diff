@@ -1,90 +1,77 @@
-diff --git a/services/ledger-api/app/__pycache__/__init__.cpython-312.pyc b/services/ledger-api/app/__pycache__/__init__.cpython-312.pyc
-new file mode 100644
-index 0000000..2c6e3ef
-Binary files /dev/null and b/services/ledger-api/app/__pycache__/__init__.cpython-312.pyc differ
-diff --git a/services/ledger-api/app/__pycache__/models.cpython-312.pyc b/services/ledger-api/app/__pycache__/models.cpython-312.pyc
-new file mode 100644
-index 0000000..908f4e4
-Binary files /dev/null and b/services/ledger-api/app/__pycache__/models.cpython-312.pyc differ
 diff --git a/services/ledger-api/app/models.py b/services/ledger-api/app/models.py
-index 06a20fa..116350e 100644
+index 06a20fa..188c000 100644
 --- a/services/ledger-api/app/models.py
 +++ b/services/ledger-api/app/models.py
 @@ -1,4 +1,4 @@
 -"""SQLAlchemy 2.0 models. Must match migrations/versions exactly (head = 0004).
-+"""SQLAlchemy 2.0 models. Must match migrations/versions exactly (head = 0006).
++"""SQLAlchemy 2.0 models. Must match migrations/versions exactly (head = 0005).
  
  Conventions: money is BigInteger cents, weights are Numeric(14, 3) kilograms.
  """
-@@ -18,6 +18,16 @@ class Base(DeclarativeBase):
- 
- class Order(Base):
-     __tablename__ = "orders"
-+    __table_args__ = (
-+        CheckConstraint(
-+            "grade_deduction_kg IS NULL OR grade_deduction_kg >= 0",
-+            name="ck_orders_grade_deduction_nonneg",
-+        ),
-+        CheckConstraint(
-+            "grade_deduction_kg IS NULL OR grade_deduction_kg <= net_weight_kg",
-+            name="ck_orders_grade_deduction_le_net",
-+        ),
-+    )
- 
-     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-     order_no: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
-@@ -25,6 +35,8 @@ class Order(Base):
-     material_grade: Mapped[str] = mapped_column(Text, nullable=False)
-     net_weight_kg: Mapped[Decimal] = mapped_column(Numeric(14, 3), nullable=False)
-     price_per_kg_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
-+    # Contamination deduction from goods-in inspection. NULL = no deduction (0 kg).
-+    grade_deduction_kg: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 3), nullable=True)
-     status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'open'"))
+@@ -29,6 +29,8 @@ class Order(Base):
      created_at: Mapped[Optional[datetime]] = mapped_column(
          DateTime(timezone=True), server_default=text("now()")
-diff --git a/services/ledger-api/app/services/__pycache__/__init__.cpython-312.pyc b/services/ledger-api/app/services/__pycache__/__init__.cpython-312.pyc
-new file mode 100644
-index 0000000..2af6544
-Binary files /dev/null and b/services/ledger-api/app/services/__pycache__/__init__.cpython-312.pyc differ
-diff --git a/services/ledger-api/app/services/__pycache__/reconciliation.cpython-312.pyc b/services/ledger-api/app/services/__pycache__/reconciliation.cpython-312.pyc
-new file mode 100644
-index 0000000..133c20b
-Binary files /dev/null and b/services/ledger-api/app/services/__pycache__/reconciliation.cpython-312.pyc differ
+     )
++    # Inspector's goods-in deduction in kg; NULL means no deduction.
++    deduction_kg: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 3), nullable=True)
+ 
+ 
+ class InventoryMovement(Base):
+diff --git a/services/ledger-api/app/routes/orders.py b/services/ledger-api/app/routes/orders.py
+index 52cbacd..c8c5b14 100644
+--- a/services/ledger-api/app/routes/orders.py
++++ b/services/ledger-api/app/routes/orders.py
+@@ -7,7 +7,7 @@ from sqlalchemy import select
+ from sqlalchemy.orm import Session
+ 
+ from app.models import Order
+-from app.services.reconciliation import order_value_cents
++from app.services.reconciliation import accepted_weight_kg, order_value_cents
+ 
+ router = APIRouter(prefix="/orders", tags=["orders"])
+ 
+@@ -24,6 +24,8 @@ def _to_dict(order: Order) -> dict:
+         "supplier_id": order.supplier_id,
+         "material_grade": order.material_grade,
+         "net_weight_kg": str(order.net_weight_kg),
++        "deduction_kg": str(order.deduction_kg) if order.deduction_kg is not None else None,
++        "accepted_weight_kg": str(accepted_weight_kg(order)),
+         "price_per_kg_cents": order.price_per_kg_cents,
+         "value_cents": order_value_cents(order),
+         "status": order.status,
 diff --git a/services/ledger-api/app/services/reconciliation.py b/services/ledger-api/app/services/reconciliation.py
-index 7e2af35..a16d834 100644
+index 7e2af35..4a93d31 100644
 --- a/services/ledger-api/app/services/reconciliation.py
 +++ b/services/ledger-api/app/services/reconciliation.py
-@@ -27,10 +27,13 @@ class Mismatch:
+@@ -27,10 +27,15 @@ class Mismatch:
  
  
  def accepted_weight_kg(order) -> Decimal:
 -    """Weight the buyer is billed for: net weight, or zero if the order is not billed."""
-+    """Weight the buyer is billed for: net weight minus the goods-in grade deduction
++    """Weight the buyer is billed for: net weight minus the inspector's deduction
 +    (NULL = no deduction), or zero if the order is not billed."""
      if order.status in UNBILLED_STATUSES:
          return Decimal("0.000")
 -    return Decimal(order.net_weight_kg).quantize(KG_QUANTUM, rounding=ROUND_HALF_UP)
-+    net = Decimal(order.net_weight_kg)
-+    deduction = Decimal(order.grade_deduction_kg or 0)
-+    return (net - deduction).quantize(KG_QUANTUM, rounding=ROUND_HALF_UP)
++    net = Decimal(order.net_weight_kg).quantize(KG_QUANTUM, rounding=ROUND_HALF_UP)
++    deduction = order.deduction_kg
++    if deduction is None:
++        return net
++    return net - Decimal(deduction).quantize(KG_QUANTUM, rounding=ROUND_HALF_UP)
  
  
  def order_value_cents(order) -> int:
-diff --git a/services/ledger-api/migrations/__pycache__/env.cpython-312.pyc b/services/ledger-api/migrations/__pycache__/env.cpython-312.pyc
+diff --git a/services/ledger-api/migrations/versions/0005_add_orders_deduction_kg.py b/services/ledger-api/migrations/versions/0005_add_orders_deduction_kg.py
 new file mode 100644
-index 0000000..3d83c57
-Binary files /dev/null and b/services/ledger-api/migrations/__pycache__/env.cpython-312.pyc differ
-diff --git a/services/ledger-api/migrations/versions/0005_add_orders_grade_deduction.py b/services/ledger-api/migrations/versions/0005_add_orders_grade_deduction.py
-new file mode 100644
-index 0000000..99daf93
+index 0000000..b5c825e
 --- /dev/null
-+++ b/services/ledger-api/migrations/versions/0005_add_orders_grade_deduction.py
-@@ -0,0 +1,43 @@
-+"""add orders.grade_deduction_kg (contamination deduction found at goods-in)
++++ b/services/ledger-api/migrations/versions/0005_add_orders_deduction_kg.py
+@@ -0,0 +1,36 @@
++"""add orders.deduction_kg (inspector grade/contamination deduction)
 +
 +Revision ID: 0005
 +Revises: 0004
-+Create Date: 2026-09-29 10:00:00
++Create Date: 2026-09-30 10:00:00
 +
 +"""
 +from typing import Sequence, Union
@@ -100,97 +87,27 @@ index 0000000..99daf93
 +
 +def upgrade() -> None:
 +    op.execute("SET lock_timeout = '3s'")
-+    op.execute("SET statement_timeout = '30s'")
-+    # Nullable, no default: metadata-only. NULL means "no deduction" (= 0 kg).
-+    op.add_column(
-+        "orders",
-+        sa.Column("grade_deduction_kg", sa.Numeric(14, 3), nullable=True),
-+    )
-+    # NOT VALID so no table scan happens under this lock; 0006 validates.
++    op.execute("SET statement_timeout = '60s'")
++    # Kilograms rejected at goods-in. NULL means no deduction (same as 0);
++    # historical orders stay NULL, so there is no backfill.
++    op.add_column("orders", sa.Column("deduction_kg", sa.Numeric(14, 3), nullable=True))
 +    op.execute(
-+        "ALTER TABLE orders ADD CONSTRAINT ck_orders_grade_deduction_nonneg "
-+        "CHECK (grade_deduction_kg IS NULL OR grade_deduction_kg >= 0) NOT VALID"
++        "ALTER TABLE orders ADD CONSTRAINT ck_orders_deduction_kg_range "
++        "CHECK (deduction_kg IS NULL OR (deduction_kg >= 0 AND deduction_kg <= net_weight_kg)) NOT VALID"
 +    )
-+    op.execute(
-+        "ALTER TABLE orders ADD CONSTRAINT ck_orders_grade_deduction_le_net "
-+        "CHECK (grade_deduction_kg IS NULL OR grade_deduction_kg <= net_weight_kg) NOT VALID"
-+    )
++    op.execute("ALTER TABLE orders VALIDATE CONSTRAINT ck_orders_deduction_kg_range")
 +
 +
 +def downgrade() -> None:
-+    op.execute("SET lock_timeout = '3s'")
-+    op.execute("SET statement_timeout = '30s'")
-+    op.execute("ALTER TABLE orders DROP CONSTRAINT ck_orders_grade_deduction_le_net")
-+    op.execute("ALTER TABLE orders DROP CONSTRAINT ck_orders_grade_deduction_nonneg")
-+    op.drop_column("orders", "grade_deduction_kg")
-diff --git a/services/ledger-api/migrations/versions/0006_validate_orders_grade_deduction.py b/services/ledger-api/migrations/versions/0006_validate_orders_grade_deduction.py
-new file mode 100644
-index 0000000..c5f07cb
---- /dev/null
-+++ b/services/ledger-api/migrations/versions/0006_validate_orders_grade_deduction.py
-@@ -0,0 +1,29 @@
-+"""validate orders.grade_deduction_kg constraints
-+
-+Revision ID: 0006
-+Revises: 0005
-+Create Date: 2026-09-29 10:05:00
-+
-+"""
-+from typing import Sequence, Union
-+
-+from alembic import op
-+
-+revision: str = "0006"
-+down_revision: Union[str, None] = "0005"
-+branch_labels: Union[str, Sequence[str], None] = None
-+depends_on: Union[str, Sequence[str], None] = None
-+
-+
-+def upgrade() -> None:
 +    op.execute("SET lock_timeout = '3s'")
 +    op.execute("SET statement_timeout = '60s'")
-+    # VALIDATE only takes SHARE UPDATE EXCLUSIVE, so reads and writes continue.
-+    op.execute("ALTER TABLE orders VALIDATE CONSTRAINT ck_orders_grade_deduction_nonneg")
-+    op.execute("ALTER TABLE orders VALIDATE CONSTRAINT ck_orders_grade_deduction_le_net")
-+
-+
-+def downgrade() -> None:
-+    # A validated constraint cannot be "un-validated"; the constraints are
-+    # dropped by 0005's downgrade. Nothing to undo here.
-+    pass
-diff --git a/services/ledger-api/migrations/versions/__pycache__/0001_create_orders.cpython-312.pyc b/services/ledger-api/migrations/versions/__pycache__/0001_create_orders.cpython-312.pyc
-new file mode 100644
-index 0000000..593022f
-Binary files /dev/null and b/services/ledger-api/migrations/versions/__pycache__/0001_create_orders.cpython-312.pyc differ
-diff --git a/services/ledger-api/migrations/versions/__pycache__/0002_create_inventory_movements.cpython-312.pyc b/services/ledger-api/migrations/versions/__pycache__/0002_create_inventory_movements.cpython-312.pyc
-new file mode 100644
-index 0000000..9aefcc2
-Binary files /dev/null and b/services/ledger-api/migrations/versions/__pycache__/0002_create_inventory_movements.cpython-312.pyc differ
-diff --git a/services/ledger-api/migrations/versions/__pycache__/0003_create_ledger_and_audit.cpython-312.pyc b/services/ledger-api/migrations/versions/__pycache__/0003_create_ledger_and_audit.cpython-312.pyc
-new file mode 100644
-index 0000000..c991ef2
-Binary files /dev/null and b/services/ledger-api/migrations/versions/__pycache__/0003_create_ledger_and_audit.cpython-312.pyc differ
-diff --git a/services/ledger-api/migrations/versions/__pycache__/0004_create_order_import_staging.cpython-312.pyc b/services/ledger-api/migrations/versions/__pycache__/0004_create_order_import_staging.cpython-312.pyc
-new file mode 100644
-index 0000000..24f5a76
-Binary files /dev/null and b/services/ledger-api/migrations/versions/__pycache__/0004_create_order_import_staging.cpython-312.pyc differ
-diff --git a/services/ledger-api/migrations/versions/__pycache__/0005_add_orders_grade_deduction.cpython-312.pyc b/services/ledger-api/migrations/versions/__pycache__/0005_add_orders_grade_deduction.cpython-312.pyc
-new file mode 100644
-index 0000000..1dc326c
-Binary files /dev/null and b/services/ledger-api/migrations/versions/__pycache__/0005_add_orders_grade_deduction.cpython-312.pyc differ
-diff --git a/services/ledger-api/migrations/versions/__pycache__/0006_validate_orders_grade_deduction.cpython-312.pyc b/services/ledger-api/migrations/versions/__pycache__/0006_validate_orders_grade_deduction.cpython-312.pyc
-new file mode 100644
-index 0000000..e5b3aec
-Binary files /dev/null and b/services/ledger-api/migrations/versions/__pycache__/0006_validate_orders_grade_deduction.cpython-312.pyc differ
-diff --git a/services/ledger-api/tests/__pycache__/test_reconciliation.cpython-312-pytest-9.1.1.pyc b/services/ledger-api/tests/__pycache__/test_reconciliation.cpython-312-pytest-9.1.1.pyc
-new file mode 100644
-index 0000000..4022131
-Binary files /dev/null and b/services/ledger-api/tests/__pycache__/test_reconciliation.cpython-312-pytest-9.1.1.pyc differ
++    op.execute("ALTER TABLE orders DROP CONSTRAINT ck_orders_deduction_kg_range")
++    op.drop_column("orders", "deduction_kg")
 diff --git a/services/ledger-api/tests/test_reconciliation.py b/services/ledger-api/tests/test_reconciliation.py
-index 84035e7..83589dc 100644
+index 84035e7..4f74c02 100644
 --- a/services/ledger-api/tests/test_reconciliation.py
 +++ b/services/ledger-api/tests/test_reconciliation.py
-@@ -15,9 +15,10 @@ from app.services.reconciliation import (  # noqa: E402
+@@ -15,10 +15,11 @@ from app.services.reconciliation import (  # noqa: E402
  )
  
  
@@ -198,42 +115,39 @@ index 84035e7..83589dc 100644
 +def order(id=1, order_no="ACM-1", weight="1000.000", price=85, status="delivered", deduction=None):
      return SimpleNamespace(
          id=id, order_no=order_no, net_weight_kg=Decimal(weight),
-+        grade_deduction_kg=None if deduction is None else Decimal(deduction),
          price_per_kg_cents=price, status=status,
++        deduction_kg=None if deduction is None else Decimal(deduction),
      )
  
-@@ -33,6 +34,36 @@ def test_accepted_weight_zero_for_cancelled_order():
+ 
+@@ -33,6 +34,32 @@ def test_accepted_weight_zero_for_cancelled_order():
      assert accepted_weight_kg(order(weight="12.345")) == Decimal("12.345")
  
  
-+def test_accepted_weight_subtracts_grade_deduction():
-+    assert accepted_weight_kg(order(weight="1000.000", deduction="12.345")) == Decimal("987.655")
++def test_accepted_weight_subtracts_deduction():
++    assert accepted_weight_kg(order(weight="1000.000", deduction="12.500")) == Decimal("987.500")
++    assert accepted_weight_kg(order(weight="1000.000", deduction="0")) == Decimal("1000.000")
++    # Full rejection by inspection leaves nothing billable.
++    assert accepted_weight_kg(order(weight="50.000", deduction="50.000")) == Decimal("0.000")
 +
 +
-+def test_accepted_weight_null_or_zero_deduction_is_net_weight():
-+    assert accepted_weight_kg(order(weight="500.000", deduction=None)) == Decimal("500.000")
-+    assert accepted_weight_kg(order(weight="500.000", deduction="0")) == Decimal("500.000")
++def test_null_deduction_means_no_deduction():
++    assert accepted_weight_kg(order(weight="12.345", deduction=None)) == Decimal("12.345")
 +
 +
-+def test_accepted_weight_fully_rejected_is_zero():
-+    assert accepted_weight_kg(order(weight="500.000", deduction="500.000")) == Decimal("0.000")
-+
-+
-+def test_accepted_weight_zero_for_cancelled_order_with_deduction():
-+    assert accepted_weight_kg(order(status="cancelled", deduction="10")) == Decimal("0")
-+
-+
-+def test_order_value_uses_accepted_weight():
-+    # (1000 - 100) kg * 85 cents
++def test_deduction_reduces_order_value_at_unchanged_price():
++    # (1000 - 100) kg x 85 cents
 +    assert order_value_cents(order(weight="1000.000", price=85, deduction="100.000")) == 76_500
 +
 +
-+def test_reconcile_flags_billed_order_after_deduction_until_reversed():
-+    orders = [order(1, "ACM-1", deduction="100.000")]
++def test_cancelled_order_with_deduction_is_still_zero():
++    assert accepted_weight_kg(order(status="cancelled", deduction="5.000")) == Decimal("0")
++
++
++def test_reconcile_flags_full_weight_booking_when_deduction_exists():
++    orders = [order(id=1, weight="1000.000", price=85, deduction="100.000")]
 +    [m] = reconcile(orders, [entry(1, 85_000)])
 +    assert (m.expected_cents, m.booked_cents, m.diff_cents) == (76_500, 85_000, 8_500)
-+    # A reversing entry plus a corrected entry nets out.
-+    assert reconcile(orders, [entry(1, 85_000), entry(1, -85_000), entry(1, 76_500)]) == []
 +
 +
  def test_order_value_is_exact_in_cents():

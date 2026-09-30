@@ -9,6 +9,9 @@ It writes or reviews a migration, proves it with deterministic checks, and ends 
 | 🟡 **NEEDS-HUMAN** | A named owner must decide: an open question, a risky lock, unknown callers, or a check that couldn't run. | 1 |
 | 🔴 **REFUSED** | Unsafe as written, e.g. FLOAT money, editing a shipped migration, rewriting ledger rows. The card gives the safe alternative. | 2 |
 
+## Why schema changes
+Schema changes are where AI-written code fails most quietly: the migration looks right in review, then locks a 40M-row table, stores money as FLOAT, breaks a job that builds SQL at runtime, or rewrites ledger history. The demo org's [LEARNINGS.md](examples/acme-mini-org/LEARNINGS.md) records three such incidents. Code review rarely catches them, because what goes wrong depends on table size, on callers outside the diff, and on business rules. schema-guard puts that context and those checks next to the engineer and into CI.
+
 ## How it works
 - **The skill** does the reasoning. It investigates the tables and callers, and asks when business meaning is unclear (units, NULL meaning, backfill). It writes backward-compatible (expand/contract) migrations, plus the model, code and tests.
 - **The `sg` engine** runs deterministic checks with no LLM:
@@ -74,28 +77,40 @@ No production credentials are needed anywhere. `sg` only ever connects to a thro
 ## Example
 [examples/walkthrough](examples/walkthrough/) is a recorded two-turn session:
 1. **An ambiguous request:** "add grade deductions to orders". The skill wrote no migration. It asked 5 questions ([card](examples/walkthrough/card-turn1.md)) covering units, cardinality, NULL meaning, already-billed ledger rows, and a legacy job that builds SQL at runtime.
-2. **After the answers:** it wrote the migrations, model, code and tests, and all checks passed. The verdict stayed **NEEDS-HUMAN** because the legacy job could now trip the new constraint, so its owners must sign off ([card](examples/walkthrough/card-turn2.md), [diff](examples/walkthrough/changes.diff)).
+2. **After the answers:** it wrote the migration, model, reconciliation, API and tests, and the round trip, invariants and tests passed. The verdict is **NEEDS-HUMAN** because the legacy ERP job writes `orders` with SQL built at runtime and could now trip the new CHECK, failing the nightly batch. The engine flags it (`constraint-dynamic-writers`), and the skill turns it into one question for @acme/integrations ([card](examples/walkthrough/card-turn2.md), [diff](examples/walkthrough/changes.diff), [transcript](examples/walkthrough/transcript.md)).
 
 ## Evals
-There are 15 labelled cases across GO, NEEDS-HUMAN and REFUSED, including a false-positive trap and a prompt injection ([evals/cases](evals/cases/)). Each run starts from a fresh demo repo and runs headless `claude -p`.
+There are 16 labelled cases across GO, NEEDS-HUMAN and REFUSED, including a false-positive trap, a prompt injection and a constraint on a table with dynamic-SQL writers ([evals/cases](evals/cases/)). Each run starts from a fresh demo repo and runs headless `claude -p`.
 
 | (Sonnet, 3 runs per case) | Correct |
 |---|---|
-| Deterministic checks alone | 8/15 cases |
+| Deterministic checks alone | 9/16 cases (they can't write, ask or refuse on intent) |
 | Skill v1 | 43/45 runs (both misses over-asked on a safe new table) |
 | Skill v2: adds non-blocking `suggestions` and a test for what counts as a blocking question | Trap case 3/3; the ambiguous case still asks, 3/3 |
+| **Current** (P0–P1 plus the constraint-writer check), [results](evals/results/20260930T142133Z.json) | **48/48 runs**, every case consistent across its 3 runs, $8.36 in total |
 
-A run costs about $0.25 and takes 30–80 s. To reproduce: `uv run --project plugins/schema-guard/engine python evals/run_evals.py --runs 3 --model sonnet` (add `--baseline-only` for a free run).
+A run costs about $0.50 and takes 15–50 s. To reproduce: `uv run --project plugins/schema-guard/engine python evals/run_evals.py --runs 3 --model sonnet` (add `--baseline-only` for a free run). A perfect score only means the cases pass: case 16 exists because re-recording the walkthrough found a miss the suite didn't cover ([build notes](docs/build-notes.md)).
 
 ## Limitations
 - Postgres only. SQL analysis is regex-based: CTE-wrapped DML, `DO $$` blocks, volatile defaults, enum changes and `DROP INDEX` without CONCURRENTLY are not covered.
 - Invariants are only as good as the seed data, and lock judgments are only as good as the `est_rows` values in the policy file.
-- The callers scan is text search within this repo. Callers in other repos or behind dynamic SQL are reported as *unresolved*, never as "none".
-- The hook guards Edit and Write only. Shell edits bypass it, which is why the CI gate exists.
+- The callers scan is text search within the current repo. Dynamic SQL in this repo is reported as *unresolved*. **Callers in other repos are invisible**: list known consumers in LEARNINGS.md and CODEOWNERS until a cross-repo scan exists.
+- The edit guard hook covers Edit and Write only. It allows the edit when it can't decide (no base branch, unreadable config, uv missing), and shell edits bypass it. The CI gate is the enforcement; the hook is a convenience.
+- The throwaway-database guard for Alembic covers engines built through SQLAlchemy (sync and async). An `env.py` that opens a raw driver connection itself (e.g. `psycopg.connect(...)`) bypasses it.
 - A migration can be semantically wrong and still pass every check. Questions, the verifier and human review reduce that risk; they don't remove it.
 
+## Rolling out to a team
+What should be in place before trusting its output in production (details in [docs/rollout.md](docs/rollout.md)):
+1. **CI is the gate, not the laptop.** The reusable workflow is a required check with no LLM in it. REFUSED blocks the merge. NEEDS-HUMAN needs a code owner's approval (the label plus CODEOWNERS review). GO still gets normal review and never auto-merges.
+2. **Humans own the policy.** `schema-guard.yaml` and `LEARNINGS.md` are code-owned. Checks always use the base branch's policy, so a PR can't loosen its own rules. The org-wide rules live in one `extends:` file with `locked:` keys.
+3. **Real sizes and real-looking data.** `est_rows` refreshed from production statistics by a scheduled job, and seed data from an anonymised production sample, not hand-written rows.
+4. **Pin and stage releases.** Pin the plugin and `sg-version` to a tag, with a `next` channel for 2–3 volunteers. Any change to the skill, rules or model must pass the eval suite (accuracy and consistency) before `stable` moves.
+5. **Measure it.** Track the verdict mix (above ~40% NEEDS-HUMAN, people route around it), overrides, and every incident that got a GO. Each incident becomes an eval case and a rule.
+6. **Close the known gaps first:** a cross-repo callers scan (an org code-search index), and running the gate against a production-shaped snapshot for the biggest tables.
+
 ## More
-- [docs/rollout.md](docs/rollout.md): rolling it out to a team (versioning, CI, ownership, metrics).
+- [docs/build-notes.md](docs/build-notes.md): how it was built with AI, the design decisions, and lessons learned.
 - [docs/architecture.md](docs/architecture.md): the design and the reasons behind it.
+- [docs/rollout.md](docs/rollout.md): the full rollout plan and risks.
 - [docs/adding-a-framework.md](docs/adding-a-framework.md): how to add a migration framework.
 - [CONTRIBUTING.md](CONTRIBUTING.md) · [MIT license](LICENSE)

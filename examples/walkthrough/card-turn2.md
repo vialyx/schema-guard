@@ -1,44 +1,39 @@
 ## schema-guard: 🟡 NEEDS-HUMAN
-**Intent:** Record per-order contamination deductions (kg) found at goods-in, and make reconciliation bill on accepted weight (net minus deduction) at unchanged price per kg
-Adds nullable orders.grade_deduction_kg NUMERIC(14,3) (NULL = 0) with CHECKs >= 0 and <= net_weight_kg (NOT VALID in 0005, validated in 0006); accepted_weight_kg() subtracts it. All sg checks pass; one integrations sign-off is still open.
+**Intent:** Add inspector grade/contamination deduction (kg) to orders; reconciliation bills on accepted weight = net_weight_kg - deduction_kg (NULL = 0) at unchanged price
+Adds nullable orders.deduction_kg NUMERIC(14,3) with a range CHECK (0 <= deduction <= net weight), updates the model, accepted_weight_kg(), the order endpoint and tests. All checks pass except one open caller finding: legacy-sync's dynamic UPDATEs are subject to the new CHECK.
 
 **Why not GO**
+- check `callers` = ask: 8 caller reference(s) across 2 target(s)
 - 1 open question(s) for a human
 
 **Questions for a human (answer, then re-run)**
-1. legacy-sync: @acme/integrations must confirm before deploy. pull_updates runs UPDATE orders SET {field} = ... for ERP fields (including ERP_EXTRA_FIELDS) with no per-row error handling, so an ERP edit that lowers net_weight_kg below an existing deduction now violates ck_orders_grade_deduction_le_net and fails the whole nightly batch. Confirm no ERP_EXTRA_FIELDS maps to grade_deduction_kg, that ERP keeps receiving full net_weight_kg, and whether pull_updates should handle constraint violations per row. Recommended: get sign-off, then handle per-row failures in a follow-up.
+1. @acme/integrations: services/legacy-sync/sync.py:59 runs UPDATE orders SET {field}=... from ERP data, including net_weight_kg. Once an order has a deduction, an ERP pull that sets net_weight_kg below deduction_kg violates the new CHECK and can abort the nightly batch. Can they confirm this is acceptable or guard it (e.g. skip/report the row)? Alternative: drop the CHECK and enforce the rule in the application only.
 
 **Tables touched**
 - `orders` (core, ~250,000 rows)
 
 **Plan**
-- [expand] 0005: ADD COLUMN orders.grade_deduction_kg NUMERIC(14,3) NULL + two CHECKs NOT VALID (lock_timeout/statement_timeout set)
-- [expand] 0006: VALIDATE both CHECKs
-- [expand] models.py: column and constraints; reconciliation.accepted_weight_kg subtracts COALESCE(deduction, 0)
-- [expand] tests: deduction, NULL/zero, full rejection, cancelled, value, reconcile with reversal
+- [expand] 0005: add nullable orders.deduction_kg, no backfill (historical rows NULL = no deduction); CHECK ck_orders_deduction_kg_range added NOT VALID then validated; model, reconciliation and API updated
+- [contract — follow-up ticket] None required: NULL is a permanent, meaningful value. Separate follow-up: reversing 1200-AR ledger entries for already-posted orders that later get a deduction
+- [contract — follow-up ticket] Follow-up: an inspector write path for deduction_kg (none exists yet)
 
-| Check | Status | Summary |
-|---|---|---|
-| policy | ✅ pass | no findings across 2 migrations |
-| callers | ✅ pass | 4 caller reference(s) across 1 target(s) |
-| squawk | ✅ pass | clean |
-| roundtrip | ✅ pass | up/down/up clean; schema restored exactly |
-| invariants | ✅ pass | 3 invariant(s) hold before/after and on re-run |
-| tests | ✅ pass | 12 passed in 0.01s |
+**Checks:** ✅ policy · ❓ callers · ✅ squawk · ✅ roundtrip · ✅ invariants · ✅ tests
+
+**Findings**
+- ❓ `constraint-dynamic-writers` 3 place(s) write `orders` with SQL built at runtime; the new constraint applies to their writes and can make them fail — have the owners confirm these writes can't violate it (or guard them first); a failed write in a batch job can stop the whole batch (`services/legacy-sync/sync.py:59: cur.execute(f"UPDATE orders SET {field} = %s WHERE order_no = %s", (value, order_no))`)
 
 **Suggestions (non-blocking)**
-- Billed orders: recording a deduction after posting makes reconcile() report a mismatch. Name who posts the reversing and corrected 1200-AR entries (finance-eng), or state that the mismatch report is the trigger.
-- No write path for grade_deduction_kg exists yet (API/importer); list the intended writers in the follow-up PR.
-- Downgrade drops the column and silently discards deductions recorded after deploy; only safe before the column is in use.
-- accepted_weight_kg does not clamp; it relies on the DB CHECK. Add a test or guard for deduction > net weight.
+- Posted receivables for orders that later receive a deduction will show as reconcile() mismatches; correct them with reversing ledger entries in a separate change, never UPDATE.
+- Notify @acme/integrations that the ERP does not yet receive deduction_kg or accepted weight; keep it out of ERP_FIELD_MAP for now.
+- No code path writes deduction_kg yet; the inspector write endpoint is a follow-up.
 
 **Required reviewers:** @acme/eng @acme/finance-eng @acme/data-platform
 
 <details><summary>Files</summary>
 
 - `services/ledger-api/app/models.py`
+- `services/ledger-api/app/routes/orders.py`
 - `services/ledger-api/app/services/reconciliation.py`
-- `services/ledger-api/migrations/versions/0005_add_orders_grade_deduction.py`
-- `services/ledger-api/migrations/versions/0006_validate_orders_grade_deduction.py`
+- `services/ledger-api/migrations/versions/0005_add_orders_deduction_kg.py`
 - `services/ledger-api/tests/test_reconciliation.py`
 </details>

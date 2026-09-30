@@ -15,7 +15,7 @@ from typing import Any
 
 from sg.checks.base import Check
 from sg.core.models import CheckResult, Context, Finding, Status
-from sg.core.sql import parse, touches
+from sg.core.sql import new_tables, parse, touches
 
 SOURCE_EXT = {".py", ".sql", ".ts", ".tsx", ".js", ".go", ".rb", ".java", ".kt", ".cs", ".php", ".scala"}
 SKIP_DIRS = {".git", ".venv", "venv", "node_modules", "__pycache__", ".schema-guard", "dist", "build", ".tox"}
@@ -28,6 +28,8 @@ _PLACEHOLDER_COL = re.compile(r"\b(SET|SELECT|BY|WHERE|AND|OR)\s+\{|,\s*\{", re.
 
 # Only these ops can break an existing caller.
 BREAKING_OPS = {"drop_column", "rename_column", "alter_type", "drop_table", "rename_table", "set_not_null"}
+# A new constraint breaks no reader, but any writer may now fail; writers we can't read are the risk.
+CONSTRAINING_OPS = {"add_constraint"}
 
 
 def _iter_sources(ctx: Context):
@@ -84,8 +86,30 @@ class CallersCheck(Check):
         findings: list[Finding] = []
         details: dict[str, Any] = {}
         for mid, sql in ctx.pending_sql.items():
-            for t in touches(parse(sql, ctx.dialect.sqlglot_dialect)):
+            stmts = parse(sql, ctx.dialect.sqlglot_dialect)
+            created = new_tables(stmts)
+            for t in touches(stmts):
                 if t.op in ("create_table", "create_index", "other"):
+                    continue
+                if t.op in CONSTRAINING_OPS:
+                    if t.table.split(".")[-1].strip('"').lower() in created:
+                        continue  # a table created in this change has no existing writers
+                    key = f"{t.table} (new constraint)"
+                    if key in details:
+                        continue
+                    callers = find_callers(ctx, t.table, None)
+                    details[key] = {"op": t.op, "resolved": [], "unresolved": callers["unresolved"]}
+                    if callers["unresolved"]:
+                        writes = [c for c in callers["unresolved"] if re.search(r"\b(UPDATE|INSERT)\b", c["text"], re.I)]
+                        u = (writes or callers["unresolved"])[0]
+                        findings.append(Finding(
+                            "constraint-dynamic-writers", Status.ASK,
+                            f"{len(callers['unresolved'])} place(s) write `{t.table}` with SQL built at runtime; "
+                            "the new constraint applies to their writes and can make them fail",
+                            evidence=f"{u['path']}:{u['line']}: {u['text'][:100]}",
+                            fix="have the owners confirm these writes can't violate it (or guard them first); "
+                                "a failed write in a batch job can stop the whole batch",
+                        ))
                     continue
                 key = f"{t.table}.{t.column}" if t.column else t.table
                 if key in details:

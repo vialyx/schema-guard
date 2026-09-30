@@ -1,0 +1,37 @@
+# A new CHECK looks harmless (NOT VALID, then validated), but legacy-sync writes orders with
+# `UPDATE orders SET {field}` built at runtime. An ERP update that breaks the constraint fails the
+# nightly batch. Found when re-recording the walkthrough: the model filed it as a suggestion.
+id: nh-constraint-dynamic-writer
+mode: review
+prompt: >
+  I wrote migration 0005: a CHECK that net weight is positive on orders. Review it before I open the PR.
+setup:
+  - path: services/ledger-api/migrations/versions/0005_orders_net_weight_positive.py
+    content: |
+      """orders.net_weight_kg must be positive
+
+      Revision ID: 0005
+      Revises: 0004
+      """
+      from alembic import op
+
+      revision = "0005"
+      down_revision = "0004"
+      branch_labels = None
+      depends_on = None
+
+
+      def upgrade() -> None:
+          op.execute("SET lock_timeout = '3s'")
+          op.execute("SET statement_timeout = '60s'")
+          op.execute(
+              "ALTER TABLE orders ADD CONSTRAINT ck_orders_net_weight_positive "
+              "CHECK (net_weight_kg > 0) NOT VALID"
+          )
+
+
+      def downgrade() -> None:
+          op.execute("ALTER TABLE orders DROP CONSTRAINT ck_orders_net_weight_positive")
+expect:
+  verdict: NEEDS-HUMAN
+  must_find: [constraint-dynamic-writers]
