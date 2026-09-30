@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import shlex
 import subprocess
-import sys
 
 from sg.checks.base import Check
 from sg.core.models import CheckResult, Context, Finding, Status
+from sg.core.pyenv import service_python
 
 
 class TestsCheck(Check):
@@ -22,8 +22,8 @@ class TestsCheck(Check):
                 return CheckResult.skipped(self.name, "no test command configured for this service")
             return CheckResult(self.name, Status.WARN, "no test command configured for this service")
         argv = shlex.split(command)
-        if argv[0] in ("python", "python3"):
-            argv[0] = sys.executable  # run inside the engine's environment
+        if argv[0] in ("python", "python3"):  # the service's Python, not the engine's
+            argv = service_python(ctx.service_root, ctx.repo_root, getattr(ctx.service, "python", None)) + argv[1:]
         try:
             proc = subprocess.run(argv, cwd=ctx.service_root, capture_output=True, text=True,
                                   timeout=int(cfg.get("timeout_seconds", 300)))

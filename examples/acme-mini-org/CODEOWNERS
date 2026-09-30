@@ -7,6 +7,10 @@
 # Money and weight reconciliation logic.
 /services/ledger-api/app/services/reconciliation.py @acme/finance-eng
 
+# schema-guard policy and org lessons: changing them changes what every check enforces.
+/schema-guard.yaml @acme/data-platform
+/LEARNINGS.md @acme/data-platform
+
 # Old ERP sync script.
 /services/legacy-sync/ @acme/integrations
 /services/catalog-db/ @acme/catalog

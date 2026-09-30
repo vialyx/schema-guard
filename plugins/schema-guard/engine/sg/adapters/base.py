@@ -7,6 +7,7 @@ Every adapter must pass tests/contract/test_adapter_contract.py.
 
 from __future__ import annotations
 
+import sys
 from abc import ABC, abstractmethod
 from pathlib import Path
 
@@ -19,6 +20,8 @@ class MigrationAdapter(ABC):
 
     def __init__(self, service_root: Path):
         self.service_root = service_root
+        #: argv prefix of the service's Python, for adapters that run the service's code
+        self.python: list[str] = [sys.executable]
 
     @classmethod
     @abstractmethod

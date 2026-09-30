@@ -49,6 +49,7 @@ class ServiceConfig:
     adapter: str = "auto"
     seed: str | None = None
     tests: str | None = None
+    python: str | None = None  # command for the service's Python; see core/pyenv.py
 
 
 @dataclass
@@ -57,7 +58,12 @@ class Policy:
     source: list[str] = field(default_factory=list)
 
     @classmethod
-    def load(cls, repo_root: Path) -> "Policy":
+    def load(cls, repo_root: Path, repo_text: str | None = None, repo_source: str | None = None) -> "Policy":
+        """Merge defaults, org policy and the repo file.
+
+        `repo_text` replaces the working-copy file: the checks use the base branch's
+        policy, so a change cannot loosen the rules it is judged by.
+        """
         data = yaml.safe_load(DEFAULTS.read_text()) or {}
         sources = [str(DEFAULTS)]
         org = os.environ.get("SG_ORG_POLICY")
@@ -65,9 +71,11 @@ class Policy:
             data = _deep_merge(data, yaml.safe_load(Path(org).read_text()) or {})
             sources.append(org)
         repo_file = repo_root / POLICY_FILE
-        if repo_file.exists():
-            data = _deep_merge(data, yaml.safe_load(repo_file.read_text()) or {})
-            sources.append(str(repo_file))
+        if repo_text is None and repo_file.exists():
+            repo_text, repo_source = repo_file.read_text(), str(repo_file)
+        if repo_text is not None:
+            data = _deep_merge(data, yaml.safe_load(repo_text) or {})
+            sources.append(repo_source or POLICY_FILE)
         return cls(raw=data, source=sources)
 
     # --- services -----------------------------------------------------------

@@ -19,8 +19,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from sg.core import registry
-from sg.core.context import build_context, render_pending
+from sg.core import git, registry
+from sg.core.context import build_context, preflight, render_pending
 from sg.core.models import CheckResult, Status, Verdict
 from sg.core.report import card
 from sg.core.sql import parse, touches
@@ -128,10 +128,11 @@ def run_checks(ctx, only: list[str] | None = None) -> list[CheckResult]:
     render_pending(ctx)
     instances = [cls() for name, cls in registry.checks().items() if not only or name in only]
     instances.sort(key=lambda c: (c.order, c.name))
-    results: list[CheckResult] = []
+    results: list[CheckResult] = preflight(ctx)
     try:
         for chk in instances:
             if ctx.policy.check_config(chk.name).get("enabled", True) is False:
+                results.append(CheckResult(chk.name, Status.WARN, "disabled by policy"))
                 continue
             results.append(chk.run_safely(ctx))
     finally:
@@ -140,6 +141,10 @@ def run_checks(ctx, only: list[str] | None = None) -> list[CheckResult]:
 
 
 def cmd_check(args) -> int:
+    from sg.core.policy import find_repo_root
+
+    # Never leave an older result behind for `sg verdict` to pick up if this run fails.
+    (find_repo_root(Path(args.path)) / OUT_DIR / "checks.json").unlink(missing_ok=True)
     ctx = build_context(Path(args.path), base_ref=args.base)
     if args.no_db:
         ctx.tools["db"] = False
@@ -147,6 +152,7 @@ def cmd_check(args) -> int:
     out_dir = ctx.repo_root / OUT_DIR
     out_dir.mkdir(exist_ok=True)
     payload = {
+        "fingerprint": git.worktree_fingerprint(ctx.repo_root),
         "service": ctx.service.path,
         "migrations": [_rel(ctx, m.path) for m in ctx.changed],
         "tables": _touched_tables(ctx),
@@ -186,6 +192,9 @@ def cmd_verdict(args) -> int:
     checks_file = Path(args.checks) if args.checks else out_dir / "checks.json"
     if checks_file.exists():
         data, results = _load_checks(checks_file)
+        if data.get("fingerprint") != git.worktree_fingerprint(repo_root):
+            results.append(CheckResult.skipped(
+                "freshness", "files changed since `sg check` ran; these results are stale, re-run `sg check`"))
     else:
         data, results = {"migrations": [], "tables": []}, []
     llm: dict[str, Any] = json.loads(Path(args.llm).read_text()) if args.llm else {}

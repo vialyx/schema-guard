@@ -6,6 +6,7 @@ safe: the skill never needs production credentials.
 
 from __future__ import annotations
 
+import hashlib
 import subprocess
 from pathlib import Path
 
@@ -20,6 +21,33 @@ def is_repo(repo: Path) -> bool:
 
 def ref_exists(repo: Path, ref: str) -> bool:
     return _git(repo, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}").returncode == 0
+
+
+def resolve_ref(repo: Path, ref: str) -> str:
+    """`ref` if it exists, else `origin/<ref>` if that does (CI checkouts often lack local branches)."""
+    if ref_exists(repo, ref):
+        return ref
+    if not ref.startswith("origin/") and ref_exists(repo, f"origin/{ref}"):
+        return f"origin/{ref}"
+    return ref
+
+
+def worktree_fingerprint(repo: Path, exclude: str = ".schema-guard") -> str | None:
+    """Hash of HEAD plus every uncommitted change, so results can be tied to the code they checked."""
+    root = git_root(repo)
+    if root is None:
+        return None
+    h = hashlib.sha256()
+    h.update(_git(root, "rev-parse", "HEAD").stdout.encode())
+    h.update(_git(root, "diff", "HEAD", "--binary", "--", ".", f":(exclude){exclude}").stdout.encode())
+    untracked = _git(root, "ls-files", "--others", "--exclude-standard", "--", ".", f":(exclude){exclude}").stdout
+    for rel in sorted(untracked.splitlines()):
+        h.update(rel.encode())
+        try:
+            h.update((root / rel).read_bytes())
+        except OSError:
+            pass
+    return h.hexdigest()
 
 
 def git_root(repo: Path) -> Path | None:
